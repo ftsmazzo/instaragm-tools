@@ -21,8 +21,25 @@ export type Config = {
   empresa: { nome: string };
 };
 
+export type Postagem = {
+  id?: number;
+  id_post?: string;
+  caption_post?: string;
+  media_type?: string;
+  media_url?: string;
+  link_post?: string;
+  data_post?: string;
+  media_description?: string;
+  hashtags?: string | null;
+  mencoes?: string | null;
+  processado?: boolean;
+  processado_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type PostagensResponse = {
-  postagens: unknown[];
+  postagens: Postagem[];
   total: number;
 };
 
