@@ -1,0 +1,6 @@
+# FabriaIA Agente Instagram - Regras do projeto
+
+- Todo código produzido deve ser commitado e enviado (push) para o repositório GitHub deste projeto.
+- Manter a estrutura: painel/ (frontend), api/ (se houver), docs/, Dockerfile na raiz.
+- Deploy é feito pelo usuário no EasyPanel via GitHub + Dockerfile; não commitar secrets.
+- Ver REGRAS_TRABALHO.md e README.md para stack e convenções.
