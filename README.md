@@ -39,6 +39,7 @@ cd painel
 pnpm install
 pnpm dev
 ```
+Opcional: crie `painel/.env` com `VITE_API_URL=http://localhost:3000` para apontar para a API. Em produção, defina `VITE_API_URL` no momento do build (ex.: no EasyPanel).
 
 **API (backend):**
 ```bash

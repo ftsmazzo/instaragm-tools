@@ -1,5 +1,8 @@
 # Build do painel (React/Vite)
+# Em produção: --build-arg VITE_API_URL=https://sua-api.easypanel...
 FROM node:20-alpine AS builder
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
 WORKDIR /app
 COPY painel/ ./
 RUN npm install && npm run build

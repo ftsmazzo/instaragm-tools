@@ -1,14 +1,15 @@
 # API FabriaIA (Fastify)
+# Build context = raiz do repo; Dockerfile em api/Dockerfile
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json tsconfig.json ./
-COPY src ./src
+COPY api/package.json api/tsconfig.json ./
+COPY api/src ./src
 RUN npm install
 RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
-COPY package.json ./
+COPY api/package.json ./
 COPY --from=builder /app/dist ./dist
 RUN npm install --omit=dev
 EXPOSE 3000

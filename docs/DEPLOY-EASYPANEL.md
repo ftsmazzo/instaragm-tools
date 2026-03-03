@@ -46,13 +46,13 @@ Nenhuma variável de ambiente é obrigatória para o painel estático atual (ape
 
 ---
 
-## 4. Variáveis de ambiente (opcional)
+## 4. Variáveis de ambiente / build (painel + API)
 
-Para esta versão do painel (apenas frontend estático), **não é necessário** configurar variáveis. Quando houver API ou endpoints que dependam de URL da API, você pode adicionar algo como:
+Para o painel falar com a API em produção, defina **no build** (não em runtime):
 
-- `VITE_API_URL` (se o Vite usar variáveis `import.meta.env.VITE_*` e você injetar no build).
+- **`VITE_API_URL`** = URL pública da sua API (ex.: `https://api.seudominio.com`).
 
-Por enquanto pode deixar a seção de env vazia.
+No EasyPanel: na configuração do app do **painel**, adicione como variável de ambiente **ou** como build arg. O Dockerfile do painel aceita `ARG VITE_API_URL`; se o EasyPanel injetar env no build, use o mesmo nome. Assim o frontend já sai do build apontando para a API correta.
 
 ---
 
