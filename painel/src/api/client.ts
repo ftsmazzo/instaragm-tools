@@ -21,6 +21,13 @@ export type Config = {
   empresa: { nome: string };
 };
 
+export type PostagensResponse = {
+  postagens: unknown[];
+  total: number;
+};
+
+export type RasparResponse = PostagensResponse & { triggered: boolean };
+
 export const api = {
   getHealth: () => fetchJson<Health>("/health"),
   getConfig: () => fetchJson<Config>("/api/config"),
@@ -29,4 +36,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  getPostagens: () => fetchJson<PostagensResponse>("/api/postagens"),
+  rasparPostagens: () =>
+    fetchJson<RasparResponse>("/api/postagens/raspar", { method: "POST" }),
 };

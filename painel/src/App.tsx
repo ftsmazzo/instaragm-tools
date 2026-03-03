@@ -96,10 +96,78 @@ function PageAdmin() {
   );
 }
 function PagePostagens() {
+  const [postagens, setPostagens] = useState<unknown[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [raspando, setRaspando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const carregar = () => {
+    setError(null);
+    api
+      .getPostagens()
+      .then((r) => setPostagens(r.postagens ?? []))
+      .catch((e) => setError(e instanceof Error ? e.message : "Erro ao carregar"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  const handleRaspar = () => {
+    setRaspando(true);
+    setError(null);
+    api
+      .rasparPostagens()
+      .then((r) => {
+        setPostagens(r.postagens ?? []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Erro ao raspar"))
+      .finally(() => setRaspando(false));
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold">Postagens</h1>
-      <p className="text-gray-600 mt-2">Visualização das postagens e botão de raspagem.</p>
+      <p className="text-gray-600 mt-2 mb-4">Visualização das postagens raspadas e botão para disparar a raspagem.</p>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+          {error}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleRaspar}
+        disabled={raspando}
+        className="mb-6 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+      >
+        {raspando ? "Raspando..." : "Raspar postagens"}
+      </button>
+
+      {loading ? (
+        <p className="text-gray-500">Carregando...</p>
+      ) : postagens.length === 0 ? (
+        <p className="text-gray-500">Nenhuma postagem. Clique em &quot;Raspar postagens&quot; para disparar a raspagem no n8n.</p>
+      ) : (
+        <ul className="space-y-4">
+          {postagens.map((item, i) => (
+            <li
+              key={i}
+              className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
+            >
+              {typeof item === "object" && item !== null ? (
+                <pre className="text-xs text-gray-700 overflow-x-auto whitespace-pre-wrap break-words">
+                  {JSON.stringify(item, null, 2)}
+                </pre>
+              ) : (
+                <span className="text-gray-700">{String(item)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
