@@ -38,5 +38,8 @@ export const api = {
     }),
   getPostagens: () => fetchJson<PostagensResponse>("/api/postagens"),
   rasparPostagens: () =>
-    fetchJson<RasparResponse>("/api/postagens/raspar", { method: "POST" }),
+    fetchJson<RasparResponse>("/api/postagens/raspar", {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 };
