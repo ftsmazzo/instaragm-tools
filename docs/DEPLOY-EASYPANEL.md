@@ -94,3 +94,18 @@ O nginx está configurado com `try_files $uri $uri/ /index.html`, então o refre
 | Saída           | SPA React servido por nginx                       |
 
 Se algo falhar no build (ex.: erro de `npm install` ou `npm run build`), confira o log completo no EasyPanel; a maioria dos problemas vem de caminho do Dockerfile ou de branch errada.
+
+---
+
+## 8. Deploy da API (segundo app)
+
+Para subir a **API** (Fastify) no mesmo EasyPanel:
+
+1. Crie **outro app** no EasyPanel, também conectado ao repositório `ftsmazzo/instaragm-tools`, branch `main`.
+2. Configure o build:
+   - **Build context:** `api` (ou o caminho relativo até a pasta `api`).
+   - **Dockerfile path:** `Dockerfile` (dentro de `api/`), ou seja, context `api`, Dockerfile `api/Dockerfile`.
+3. Porta do serviço: **3000** (já exposta no Dockerfile da API).
+4. Variáveis de ambiente (opcional): `PORT=3000`, `NODE_ENV=production`.
+5. Deploy. A API ficará disponível em `https://seu-dominio-api...` ou no IP:3000 conforme configurado.
+6. No painel (frontend), configure `VITE_API_URL` apontando para essa URL da API no próximo passo (ver item B no projeto).

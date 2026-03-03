@@ -33,11 +33,20 @@ Agente-Instagram/
 
 ## Como rodar local
 
+**Painel (frontend):**
 ```bash
 cd painel
 pnpm install
 pnpm dev
 ```
+
+**API (backend):**
+```bash
+cd api
+npm install
+npm run dev
+```
+A API sobe em `http://localhost:3000`. Endpoints: `GET /`, `GET /health`, `GET /api/config`, `GET /api/postagens`, `GET /api/agentes/leads`, `GET /api/agentes/config`.
 
 ## Deploy (EasyPanel)
 
