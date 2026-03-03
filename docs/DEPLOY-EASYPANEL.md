@@ -106,6 +106,6 @@ Para subir a **API** (Fastify) no mesmo EasyPanel:
    - **Build context:** `api` (ou o caminho relativo até a pasta `api`).
    - **Dockerfile path:** `Dockerfile` (dentro de `api/`), ou seja, context `api`, Dockerfile `api/Dockerfile`.
 3. Porta do serviço: **3000** (já exposta no Dockerfile da API).
-4. Variáveis de ambiente: `PORT=3000`, `NODE_ENV=production`. Para o botão **Raspar postagens** funcionar, defina `N8N_WEBHOOK_RASPAR_POSTAGENS` com a URL do webhook n8n (ex.: `https://fabricaia-n8n.90qhxz.easypanel.host/webhook/raspar_postagens`).
+4. Variáveis de ambiente: `PORT=3000`, `NODE_ENV=production`. Para o botão **Raspar postagens** funcionar, defina `N8N_WEBHOOK_RASPAR_POSTAGENS` com a URL **interna** do webhook n8n (a API roda dentro do EasyPanel e não resolve o domínio público). Use o nome do app n8n e a porta interna, ex.: `http://fabricaia-n8n:5678/webhook/raspar_postagens` (troque `fabricaia-n8n` e `5678` pelo nome e porta do seu app n8n no painel).
 5. Deploy. A API ficará disponível em `https://seu-dominio-api...` ou no IP:3000 conforme configurado.
 6. No painel (frontend), configure `VITE_API_URL` apontando para essa URL da API no próximo passo (ver item B no projeto).
