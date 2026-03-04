@@ -37,34 +37,37 @@ export async function publishToInstagram(
     throw new Error("Instagram não retornou ID do container");
   }
 
-  if (mediaType === "REELS") {
-    // Reels: aguardar o container ficar pronto (até ~90s)
-    const maxWait = 90000;
-    const step = 3000;
-    let elapsed = 0;
-    while (elapsed < maxWait) {
-      await new Promise((r) => setTimeout(r, step));
-      elapsed += step;
-      const statusRes = await fetch(
-        `${GRAPH_API_BASE}/${creationId}?fields=status_code,status&access_token=${token}`
-      );
-      const statusJson = (await statusRes.json()) as {
-        status_code?: string;
-        status?: string;
-        error?: { message?: string };
-      };
-      if (statusJson.status_code === "FINISHED") break;
-      if (statusJson.status_code === "ERROR" || statusJson.status === "ERROR") {
-        const detail =
-          statusJson.error?.message ||
-          (statusJson as { error_message?: string }).error_message ||
-          "Vídeo rejeitado ou URL inacessível. Confira se a URL da mídia é pública e o formato do Reels (MP4, etc.).";
-        throw new Error(`Processamento do vídeo falhou no Instagram: ${detail}`);
-      }
+  // Aguardar o container ficar pronto (FINISHED) antes de media_publish — evita "Media ID is not available".
+  // Para imagem pode ser imediato; para Reels leva até ~90s.
+  const maxWait = mediaType === "REELS" ? 90000 : 30000;
+  const step = mediaType === "REELS" ? 3000 : 1500;
+  let elapsed = 0;
+  while (elapsed < maxWait) {
+    await new Promise((r) => setTimeout(r, step));
+    elapsed += step;
+    const statusRes = await fetch(
+      `${GRAPH_API_BASE}/${creationId}?fields=status_code,status&access_token=${token}`
+    );
+    const statusJson = (await statusRes.json()) as {
+      status_code?: string;
+      status?: string;
+      error?: { message?: string };
+    };
+    if (statusJson.status_code === "FINISHED") break;
+    // Para imagem às vezes a API não retorna status_code; após um tempo assumir pronto.
+    if (mediaType === "IMAGE" && statusJson.status_code === undefined && elapsed >= 3000) break;
+    if (statusJson.status_code === "ERROR" || statusJson.status === "ERROR") {
+      const detail =
+        statusJson.error?.message ||
+        (statusJson as { error_message?: string }).error_message ||
+        "Mídia rejeitada ou URL inacessível. Confira se a URL é pública e o formato (imagem JPEG, Reels MP4).";
+      throw new Error(`Processamento falhou no Instagram: ${detail}`);
     }
-    if (elapsed >= maxWait) {
-      throw new Error("Timeout aguardando processamento do Reels no Instagram (90s). Tente um vídeo menor ou verifique a URL.");
-    }
+  }
+  if (elapsed >= maxWait) {
+    throw new Error(
+      `Timeout aguardando container no Instagram (${mediaType === "REELS" ? "90" : "30"}s). Tente novamente ou verifique a URL da mídia.`
+    );
   }
 
   const publishRes = await fetch(
