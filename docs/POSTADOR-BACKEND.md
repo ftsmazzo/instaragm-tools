@@ -181,10 +181,10 @@ Nada disso exige o n8n; o fluxo do Postador fica inteiro no nosso sistema.
 
 ---
 
-## Implementação inicial (concluída)
+## Implementação atual (100% no nosso sistema, sem n8n)
 
-- **API** (`api/`): rotas `POST /api/postador/gerar-caption` (JSON `{ descricao }`), `POST /api/postador/refazer-caption` (JSON `{ caption_atual, feedback }`), `POST /api/postador/publicar` (JSON `{ caption }`). Respostas mock (sem MinIO, IA real ou Graph API).
-- **Painel**: tela Postador com descrição, botão "Gerar caption", exibição do caption para aprovação, "Quero alterar" (feedback + refazer) e "Aprovar e publicar". Cliente em `painel/src/api/client.ts` com `VITE_API_URL`.
+- **API** (`api/`): geração e refino de caption via **OpenAI** no backend (`api/src/services/caption.ts`). Variável de ambiente `OPENAI_API_KEY`. Rotas: `POST /api/postador/gerar-caption` (JSON ou multipart com descricao + arquivo opcional), `POST /api/postador/refazer-caption`, `POST /api/postador/publicar`. Publicação real (MinIO + Graph API) em implementação.
+- **Painel**: formulário com descrição, **upload opcional de vídeo/imagem**, botão "Gerar caption", caption gerado por IA para aprovação, "Quero alterar" (refazer com IA) e "Aprovar e publicar". Nenhuma chamada a n8n para o Postador.
 
 ---
 

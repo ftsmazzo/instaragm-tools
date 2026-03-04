@@ -65,11 +65,24 @@ export const api = {
       body: {},
     }),
   postador: {
-    gerarCaption: (descricao: string) =>
-      fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/gerar-caption", {
+    gerarCaption: (descricao: string, file?: File | null) => {
+      if (file) {
+        const form = new FormData();
+        form.set("descricao", descricao);
+        form.set("arquivo", file);
+        return fetch(`${base}/api/postador/gerar-caption`, {
+          method: "POST",
+          body: form,
+        }).then((res) => {
+          if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+          return res.json() as Promise<{ caption: string; media_url?: string; media_type?: string }>;
+        });
+      }
+      return fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/gerar-caption", {
         method: "POST",
         body: { descricao },
-      }),
+      });
+    },
     refazerCaption: (caption_atual: string, feedback: string, refazer_midia?: boolean) =>
       fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/refazer-caption", {
         method: "POST",

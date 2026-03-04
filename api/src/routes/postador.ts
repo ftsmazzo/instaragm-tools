@@ -1,18 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
+import { gerarCaption as gerarCaptionIA, refazerCaption as refazerCaptionIA } from "../services/caption.js";
 
 /**
- * Rotas do Postador: gerar caption, refazer com feedback, publicar.
- * Por ora: respostas mock (sem MinIO, sem IA real, sem Graph API).
- * A integração com IA (OpenAI ou webhook n8n), MinIO e Instagram fica para as próximas etapas.
+ * Postador 100% no nosso sistema: IA (OpenAI) na API, sem n8n.
+ * Gera e refaz caption; multipart para descricao + arquivo; publicação (MinIO + Graph API em implementação).
  */
-
-function mockCaption(descricao: string): string {
-  return `[Caption gerado para]\n\n${descricao}\n\n#FabriaIA #Instagram`;
-}
-
-function mockRefazerCaption(captionAtual: string, feedback: string): string {
-  return `${captionAtual}\n\n---\n[Alteração solicitada: ${feedback}]`;
-}
 
 export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
   // POST /api/postador/gerar-caption — JSON { descricao } OU multipart (descricao + arquivo opcional)
@@ -31,10 +23,9 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
           const mimetype = part.mimetype ?? "";
           if (mimetype.startsWith("video/")) mediaType = "REELS";
           else if (mimetype.startsWith("image/")) mediaType = "IMAGE";
-          // Consumir o stream (por ora não guardamos em MinIO; quando integrar, fazer upload aqui)
           const file = part.file;
           for await (const _ of file) {
-            // drain
+            // drain (MinIO upload em implementação)
           }
         }
       }
@@ -47,12 +38,21 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: "Campo 'descricao' é obrigatório" });
     }
 
-    const caption = mockCaption(descricao);
-    return reply.send({
-      caption,
-      media_url: undefined,
-      media_type: mediaType,
-    });
+    try {
+      const caption = await gerarCaptionIA(descricao, mediaType);
+      return reply.send({
+        caption,
+        media_url: undefined,
+        media_type: mediaType,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar caption";
+      if (msg.includes("OPENAI_API_KEY")) {
+        return reply.status(503).send({ error: msg });
+      }
+      fastify.log.error({ err }, "gerar-caption");
+      return reply.status(500).send({ error: msg });
+    }
   });
 
   // POST /api/postador/refazer-caption — JSON: { caption_atual, feedback, refazer_midia?: boolean }
@@ -67,13 +67,21 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    const caption = mockRefazerCaption(captionAtual, feedback);
-    // refazer_midia: por ora não geramos mídia; quando houver IA, usar para regenerar imagem
-    return reply.send({
-      caption,
-      media_url: undefined,
-      media_type: undefined,
-    });
+    try {
+      const caption = await refazerCaptionIA(captionAtual, feedback);
+      return reply.send({
+        caption,
+        media_url: undefined,
+        media_type: undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao refazer caption";
+      if (msg.includes("OPENAI_API_KEY")) {
+        return reply.status(503).send({ error: msg });
+      }
+      fastify.log.error({ err }, "refazer-caption");
+      return reply.status(500).send({ error: msg });
+    }
   });
 
   // POST /api/postador/publicar — JSON: { caption, media_url?, media_type? }
@@ -85,11 +93,11 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: "Campo 'caption' é obrigatório para publicar" });
     }
 
-    // Mock: não chama MinIO nem Graph API; retorna sucesso
+    // TODO: MinIO (upload se houver mídia) + Graph API com token da config
     return reply.send({
       ok: true,
       id_container: `mock-${Date.now()}`,
-      message: "Publicação simulada. Integração com MinIO e Instagram Graph API em breve.",
+      message: "Publicação simulada. Integração MinIO + Instagram Graph API em implementação.",
     });
   });
 };

@@ -5,8 +5,10 @@ type Step = "form" | "review" | "published";
 
 export function Postador() {
   const [descricao, setDescricao] = useState("");
+  const [arquivo, setArquivo] = useState<File | null>(null);
   const [caption, setCaption] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,9 +23,15 @@ export function Postador() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.postador.gerarCaption(descricao.trim());
+      const res = await api.postador.gerarCaption(descricao.trim(), arquivo ?? undefined);
       setCaption(res.caption);
       setMediaUrl(res.media_url ?? null);
+      if (arquivo && arquivo.type.startsWith("image/")) {
+        const url = URL.createObjectURL(arquivo);
+        setPreviewUrl(url);
+      } else {
+        setPreviewUrl(null);
+      }
       setStep("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao gerar caption.");
@@ -72,8 +80,10 @@ export function Postador() {
 
   const handleNovoPost = () => {
     setDescricao("");
+    setArquivo(null);
     setCaption(null);
     setMediaUrl(null);
+    setPreviewUrl(null);
     setFeedback("");
     setPublishedId(null);
     setStep("form");
@@ -109,6 +119,24 @@ export function Postador() {
               disabled={loading}
             />
           </div>
+          <div>
+            <label htmlFor="arquivo" className="block text-sm font-medium text-gray-700 mb-1">
+              Vídeo ou imagem (opcional)
+            </label>
+            <input
+              id="arquivo"
+              type="file"
+              accept="image/*,video/*"
+              className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+              onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+              disabled={loading}
+            />
+            {arquivo && (
+              <p className="mt-1 text-sm text-gray-500">
+                {arquivo.name} ({(arquivo.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
           <button
             type="button"
             onClick={handleGerarCaption}
@@ -130,10 +158,14 @@ export function Postador() {
               {caption}
             </pre>
           </div>
-          {mediaUrl && (
+          {(previewUrl || mediaUrl || (arquivo && arquivo.type.startsWith("video/"))) && (
             <div>
-              <span className="block text-sm font-medium text-gray-700 mb-1">Preview da mídia</span>
-              <img src={mediaUrl} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
+              <span className="block text-sm font-medium text-gray-700 mb-1">Mídia do post</span>
+              {previewUrl || mediaUrl ? (
+                <img src={previewUrl ?? mediaUrl ?? ""} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
+              ) : arquivo?.type.startsWith("video/") ? (
+                <p className="text-sm text-gray-600 py-2">Vídeo: {arquivo.name}</p>
+              ) : null}
             </div>
           )}
           <div className="flex flex-wrap gap-3">
