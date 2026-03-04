@@ -6,13 +6,15 @@ const getBaseUrl = (): string => {
 
 const base = getBaseUrl();
 
-async function fetchJson<T>(path: string, options?: RequestInit & { body?: Record<string, unknown> }): Promise<T> {
+type FetchOptions = Omit<RequestInit, "body"> & { body?: Record<string, unknown> };
+
+async function fetchJson<T>(path: string, options?: FetchOptions): Promise<T> {
   const { body, ...init } = options ?? {};
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(init.headers as Record<string, string>) };
   const res = await fetch(`${base}${path}`, {
     ...init,
     headers,
-    body: body ? JSON.stringify(body) : init.body,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   return res.json() as Promise<T>;
