@@ -10,7 +10,8 @@ const PROVIDERS = [
 
 const MODELS_OPENAI = [
   { id: "gpt-4.1", label: "GPT-4.1" },
-  { id: "gpt-5", label: "GPT-5" },
+  { id: "gpt-4o", label: "GPT-4o" },
+  { id: "gpt-5.2", label: "GPT-5.2" },
 ];
 
 const MODELS_CLAUDE = [
