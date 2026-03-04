@@ -24,7 +24,7 @@ Painel web para configurar e operar: Agente de Comentários/Direct no Instagram,
 ```
 Agente-Instagram/
 ├── painel/          # Frontend React (Vite)
-├── api/             # API Fastify (health, Postador: gerar/refazer caption, publicar)
+├── api/             # API Fastify (health, config, postagens, agentes, Postador)
 ├── docs/            # Documentação (webhooks, Postador, deploy)
 ├── Dockerfile       # Build e run do painel
 ├── .gitignore
@@ -34,24 +34,25 @@ Agente-Instagram/
 ## Postador (primeira versão)
 
 - **Painel:** tela Postador com descrição, botão "Gerar caption", revisão do caption em tela, opção "Quero alterar" (feedback para refazer) e "Aprovar e publicar".
-- **API:** `POST /api/postador/gerar-caption` (JSON `{ descricao }`), `POST /api/postador/refazer-caption` (JSON `{ caption_atual, feedback }`), `POST /api/postador/publicar` (JSON `{ caption }`). Por ora respostas mock (sem MinIO, sem IA real, sem Instagram Graph API). Ver `docs/POSTADOR-BACKEND.md` para evolução (MinIO, IA, agendamento).
+- **API:** `POST /api/postador/gerar-caption`, `POST /api/postador/refazer-caption`, `POST /api/postador/publicar`. Por ora respostas mock. Ver `docs/POSTADOR-BACKEND.md` para evolução (MinIO, IA, agendamento).
 
 ## Como rodar local
 
-**Painel:**
+**Painel (frontend):**
 ```bash
 cd painel
 pnpm install
 pnpm dev
 ```
+Crie `painel/.env` com `VITE_API_URL=http://localhost:3000` para apontar para a API. Em produção, defina `VITE_API_URL` no build (ex.: EasyPanel).
 
-**API (Postador, health):**
+**API (backend):**
 ```bash
 cd api
 npm install
 npm run dev
 ```
-A API sobe em `http://localhost:3000`. No painel, configure `VITE_API_URL=http://localhost:3000` (arquivo `.env` na pasta `painel/`) para apontar para a API local.
+A API sobe em `http://localhost:3000`. Endpoints: `GET /`, `GET /health`, `GET /api/config`, `GET /api/postagens`, `GET /api/agentes/*`, `POST /api/postador/gerar-caption`, `POST /api/postador/refazer-caption`, `POST /api/postador/publicar`.
 
 ## Deploy (EasyPanel)
 

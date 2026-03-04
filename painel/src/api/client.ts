@@ -1,48 +1,82 @@
-const getBaseUrl = () => import.meta.env.VITE_API_URL?.trim() || "http://localhost:3000";
-
-type RequestOptions = Omit<RequestInit, "body"> & {
-  body?: Record<string, unknown> | FormData;
+const getBaseUrl = (): string => {
+  const url = import.meta.env.VITE_API_URL;
+  if (url) return (url as string).trim().replace(/\/$/, "");
+  return "http://localhost:3000";
 };
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, ...init } = options;
-  const url = `${getBaseUrl().replace(/\/$/, "")}${path}`;
-  const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
-  if (body && !(body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
-  }
-  const fetchBody: BodyInit | undefined =
-    body instanceof FormData ? body : body ? JSON.stringify(body) : undefined;
-  const res = await fetch(url, {
+const base = getBaseUrl();
+
+async function fetchJson<T>(path: string, options?: RequestInit & { body?: Record<string, unknown> }): Promise<T> {
+  const { body, ...init } = options ?? {};
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(init.headers as Record<string, string>) };
+  const res = await fetch(`${base}${path}`, {
     ...init,
     headers,
-    body: fetchBody,
+    body: body ? JSON.stringify(body) : init.body,
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
   return res.json() as Promise<T>;
 }
 
-export const api = {
-  getHealth: () => request<{ ok: boolean }>("/health"),
+export type Health = { status: string; timestamp: string };
+export type Config = {
+  instagram: { connected: boolean };
+  empresa: { nome: string };
+};
 
+export type Postagem = {
+  id?: number;
+  id_post?: string;
+  caption_post?: string;
+  media_type?: string;
+  media_url?: string;
+  link_post?: string;
+  data_post?: string;
+  media_description?: string;
+  hashtags?: string | null;
+  mencoes?: string | null;
+  processado?: boolean;
+  processado_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type PostagensResponse = {
+  postagens: Postagem[];
+  total: number;
+};
+
+export type RasparResponse = PostagensResponse & { triggered: boolean };
+
+export const api = {
+  getHealth: () => fetchJson<Health>("/health"),
+  getConfig: () => fetchJson<Config>("/api/config"),
+  putConfig: (body: Config) =>
+    fetchJson<{ saved: boolean; received: Config }>("/api/config", {
+      method: "PUT",
+      body,
+    }),
+  getPostagens: () => fetchJson<PostagensResponse>("/api/postagens"),
+  rasparPostagens: () =>
+    fetchJson<RasparResponse>("/api/postagens/raspar", {
+      method: "POST",
+      body: {},
+    }),
   postador: {
     gerarCaption: (descricao: string) =>
-      request<{ caption: string; media_url?: string; media_type?: string }>(
-        "/api/postador/gerar-caption",
-        { method: "POST", body: { descricao } }
-      ),
+      fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/gerar-caption", {
+        method: "POST",
+        body: { descricao },
+      }),
     refazerCaption: (caption_atual: string, feedback: string, refazer_midia?: boolean) =>
-      request<{ caption: string; media_url?: string; media_type?: string }>(
-        "/api/postador/refazer-caption",
-        { method: "POST", body: { caption_atual, feedback, refazer_midia } }
-      ),
+      fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/refazer-caption", {
+        method: "POST",
+        body: { caption_atual, feedback, refazer_midia },
+      }),
     publicar: (caption: string, media_url?: string, media_type?: string) =>
-      request<{ ok: boolean; id_container?: string; message?: string }>(
-        "/api/postador/publicar",
-        { method: "POST", body: { caption, media_url, media_type } }
-      ),
+      fetchJson<{ ok: boolean; id_container?: string; message?: string }>("/api/postador/publicar", {
+        method: "POST",
+        body: { caption, media_url, media_type },
+      }),
   },
 };

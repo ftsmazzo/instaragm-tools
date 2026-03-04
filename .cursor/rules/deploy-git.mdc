@@ -1,0 +1,13 @@
+---
+description: Após alterações no código, commitar, dar push e avisar para implantar no EasyPanel
+alwaysApply: true
+---
+
+# Git e deploy
+
+Sempre que fizer alterações no código neste projeto:
+
+1. **Commit e push** – executar `git add` (arquivos alterados), `git commit` com mensagem objetiva (ex.: `feat: ...`, `fix: ...`, `docs: ...`) e `git push`.
+2. **Avisar o usuário** – ao final, informar de forma clara: **"Pode implantar no EasyPanel"** (ou equivalente), para que ele faça o deploy sem precisar pedir.
+
+Não pular essa etapa. Evitar deixar alterações só locais sem commit/push.
