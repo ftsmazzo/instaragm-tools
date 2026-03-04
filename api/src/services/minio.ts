@@ -4,7 +4,9 @@ import type { Readable } from "stream";
 // Em ESM o pacote minio pode não expor default; usar namespace ou default conforme o runtime
 const Minio = (MinioNamespace as unknown as { default?: typeof MinioNamespace }).default ?? MinioNamespace;
 
-// Suporta tanto as variáveis do Postador quanto as do CRM (MINIO_SERVER_URL, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD)
+// Conexão: use MINIO_INTERNAL_URL dentro do EasyPanel (evita getaddrinfo EAI_AGAIN no host público).
+// URL pública: MINIO_PUBLIC_URL para os links dos objetos (Instagram precisa acessar).
+const MINIO_INTERNAL_URL = process.env.MINIO_INTERNAL_URL ?? "";
 const MINIO_SERVER_URL = process.env.MINIO_SERVER_URL ?? "";
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT ?? "";
 const MINIO_PORT = parseInt(process.env.MINIO_PORT ?? "9000", 10);
@@ -32,8 +34,9 @@ function getClient(): InstanceType<typeof Minio.Client> {
     throw new Error("MinIO: defina MINIO_ACCESS_KEY e MINIO_SECRET_KEY (ou MINIO_ROOT_USER e MINIO_ROOT_PASSWORD).");
   }
   if (!client) {
-    if (MINIO_SERVER_URL.trim()) {
-      const { endPoint, port, useSSL } = parseServerUrl(MINIO_SERVER_URL.trim());
+    const connectionUrl = MINIO_INTERNAL_URL.trim() || MINIO_SERVER_URL.trim();
+    if (connectionUrl) {
+      const { endPoint, port, useSSL } = parseServerUrl(connectionUrl);
       client = new Minio.Client({
         endPoint,
         port,
@@ -51,13 +54,17 @@ function getClient(): InstanceType<typeof Minio.Client> {
         secretKey,
       });
     } else {
-      throw new Error("MinIO: defina MINIO_SERVER_URL (ex.: https://cmr-imobiliaria-minio.90qhxz.easypanel.host) ou MINIO_ENDPOINT.");
+      throw new Error("MinIO: defina MINIO_INTERNAL_URL (ex.: http://cmr-imobiliaria-minio:9000) ou MINIO_SERVER_URL ou MINIO_ENDPOINT.");
     }
   }
   return client;
 }
 
 function getPublicUrl(objectName: string): string {
+  // URLs dos objetos devem ser públicas (Instagram baixa a mídia). Com MINIO_INTERNAL_URL, defina MINIO_PUBLIC_URL.
+  if (MINIO_INTERNAL_URL.trim() && !MINIO_PUBLIC_URL.trim()) {
+    throw new Error("MinIO: ao usar MINIO_INTERNAL_URL, defina MINIO_PUBLIC_URL com a URL pública do MinIO (ex.: https://cmr-imobiliaria-minio.90qhxz.easypanel.host) para os links da mídia.");
+  }
   const base = (MINIO_PUBLIC_URL || MINIO_SERVER_URL).trim().replace(/\/$/, "");
   if (base) {
     return `${base}/${MINIO_BUCKET}/${objectName}`;
@@ -70,7 +77,7 @@ function getPublicUrl(objectName: string): string {
 export function isMinioConfigured(): boolean {
   const accessKey = (MINIO_ACCESS_KEY || (process.env.MINIO_ROOT_USER ?? "")).trim();
   const secretKey = (MINIO_SECRET_KEY || (process.env.MINIO_ROOT_PASSWORD ?? "")).trim();
-  const hasUrl = MINIO_SERVER_URL.trim() || MINIO_ENDPOINT.trim();
+  const hasUrl = MINIO_INTERNAL_URL.trim() || MINIO_SERVER_URL.trim() || MINIO_ENDPOINT.trim();
   return Boolean(hasUrl && accessKey && secretKey);
 }
 

@@ -46,16 +46,24 @@ export async function publishToInstagram(
       await new Promise((r) => setTimeout(r, step));
       elapsed += step;
       const statusRes = await fetch(
-        `${GRAPH_API_BASE}/${creationId}?fields=status_code&access_token=${token}`
+        `${GRAPH_API_BASE}/${creationId}?fields=status_code,status&access_token=${token}`
       );
-      const statusJson = (await statusRes.json()) as { status_code?: string };
+      const statusJson = (await statusRes.json()) as {
+        status_code?: string;
+        status?: string;
+        error?: { message?: string };
+      };
       if (statusJson.status_code === "FINISHED") break;
-      if (statusJson.status_code === "ERROR") {
-        throw new Error("Processamento do vídeo falhou no Instagram");
+      if (statusJson.status_code === "ERROR" || statusJson.status === "ERROR") {
+        const detail =
+          statusJson.error?.message ||
+          (statusJson as { error_message?: string }).error_message ||
+          "Vídeo rejeitado ou URL inacessível. Confira se a URL da mídia é pública e o formato do Reels (MP4, etc.).";
+        throw new Error(`Processamento do vídeo falhou no Instagram: ${detail}`);
       }
     }
     if (elapsed >= maxWait) {
-      throw new Error("Timeout aguardando processamento do Reels no Instagram");
+      throw new Error("Timeout aguardando processamento do Reels no Instagram (90s). Tente um vídeo menor ou verifique a URL.");
     }
   }
 
