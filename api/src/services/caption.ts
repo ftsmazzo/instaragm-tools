@@ -1,62 +1,122 @@
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const apiKey = process.env.OPENAI_API_KEY;
+// Variáveis de ambiente para o Postador (IA)
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const POSTADOR_IA_PROVIDER = (process.env.POSTADOR_IA_PROVIDER ?? "openai").toLowerCase();
+const POSTADOR_IA_MODEL_OPENAI = process.env.POSTADOR_IA_MODEL_OPENAI ?? "gpt-4o";
+const POSTADOR_IA_MODEL_CLAUDE = process.env.POSTADOR_IA_MODEL_CLAUDE ?? "claude-sonnet-4-5-20250929";
 
-function getClient(): OpenAI {
-  if (!apiKey?.trim()) {
+type Provider = "openai" | "claude";
+
+function getProvider(): Provider {
+  if (POSTADOR_IA_PROVIDER === "claude") return "claude";
+  return "openai";
+}
+
+function getOpenAI(): OpenAI {
+  if (!OPENAI_API_KEY?.trim()) {
     throw new Error("OPENAI_API_KEY não configurada. Defina a variável de ambiente na API.");
   }
-  return new OpenAI({ apiKey: apiKey.trim() });
+  return new OpenAI({ apiKey: OPENAI_API_KEY.trim() });
+}
+
+function getAnthropic(): Anthropic {
+  if (!ANTHROPIC_API_KEY?.trim()) {
+    throw new Error("ANTHROPIC_API_KEY não configurada. Defina a variável de ambiente na API para usar Claude.");
+  }
+  return new Anthropic({ apiKey: ANTHROPIC_API_KEY.trim() });
+}
+
+// Prompt adaptado do seu agente (Postador n8n): estrutura, workflow e regras, sem perder potência.
+// Saída: uma única legenda formatada (pronta para Graph API), com hashtags no final.
+const SYSTEM_GERAR = `Você é um especialista em criação de conteúdo para Instagram com a seguinte configuração:
+
+<role>Especialista em Criação de Conteúdo para Instagram</role>
+<expertise>Criação de posts altamente engajadores para o feed do Instagram, utilizando técnicas de Neuromarketing, Storytelling, Copywriting emocional e SEO para redes sociais</expertise>
+<tools>Copywriting persuasivo, estrutura narrativa fluida, uso estratégico de emojis e hashtags otimizadas</tools>
+
+<workflow>
+1. Analisar o conteúdo fornecido (texto-base ou tema) — captar a intenção emocional e temática.
+2. Gerar um texto contínuo, engajador e emocionalmente conectado — despertar empatia e capturar a atenção nos primeiros segundos.
+3. Apresentar mensagem central clara, com storytelling e copywriting — estabelecer conexão emocional e relevância com o público-alvo.
+4. Incluir proposta de valor, reflexão, aprendizado ou informação relevante — estimular compartilhamento, comentários e retenção.
+5. Finalizar com CTA forte e autêntica — incentivar interação (curtir, comentar, compartilhar ou marcar).
+6. Incluir até 10 hashtags relevantes e de alto alcance — ampliar visibilidade e alcance orgânico.
+</workflow>
+
+<regras>
+- Adaptar o tom e estilo ao tipo de conteúdo recebido, mantendo sempre conexão emocional e valor para o público.
+- Utilizar emojis estrategicamente para intensificar a emoção e facilitar a leitura — nunca excessivo, nunca ausente.
+- Manter naturalidade textual, evitando divisões explícitas como "introdução", "desenvolvimento".
+- Garantir texto visualmente escaneável, fluido e emocionalmente atrativo.
+- Saída: UMA ÚNICA LEGENDA já formatada para Instagram (pronta para ser enviada como caption na Graph API).
+- Use \\n\\n entre parágrafos para legibilidade no feed. Hashtags todas no final, em bloco compacto (uma linha ou bloco único), sem quebra entre cada uma.
+- Nunca use aspas desnecessárias, barras de escape ou marcações. O resultado deve ser limpo e direto.
+- Se o conteúdo contiver versículos bíblicos, reflexões, ideias motivacionais ou mensagens inspiradoras, valorize com boas pausas e espaçamento.
+</regras>
+
+<output>Retorne somente a legenda final formatada, com emojis equilibrados, parágrafos separados por \\n\\n, CTA envolvente ao final do texto e hashtags agrupadas no fim. Nada mais.</output>`;
+
+// Refazer: regras do seu "Formatar texto" + aplicar feedback do usuário.
+const SYSTEM_REFAZER = `Você é um especialista em escrita criativa para redes sociais, focado em formatação perfeita de legendas para Instagram, ideais para a Graph API.
+
+Seu objetivo é ajustar a legenda conforme o pedido do usuário, mantendo estrutura visualmente bonita, legível e engajadora.
+
+Regras: use \\n\\n entre parágrafos; distribua emojis de forma natural; preserve o tom emocional; valorize reflexões ou mensagens inspiradoras com boas pausas; finalize com CTA envolvente; hashtags todas no final, em bloco compacto; resultado limpo, sem aspas ou escapes. Retorne somente a nova legenda formatada, nada mais.`;
+
+async function callOpenAI(system: string, user: string, model: string): Promise<string> {
+  const openai = getOpenAI();
+  const res = await openai.chat.completions.create({
+    model: model || POSTADOR_IA_MODEL_OPENAI,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    max_tokens: 800,
+  });
+  const text = res.choices[0]?.message?.content?.trim();
+  if (!text) throw new Error("Resposta vazia da IA.");
+  return text;
+}
+
+async function callClaude(system: string, user: string, model: string): Promise<string> {
+  const anthropic = getAnthropic();
+  const res = await anthropic.messages.create({
+    model: model || POSTADOR_IA_MODEL_CLAUDE,
+    max_tokens: 800,
+    system,
+    messages: [{ role: "user", content: user }],
+  });
+  const block = res.content.find((b) => b.type === "text");
+  const text = block && "text" in block ? (block.text as string).trim() : "";
+  if (!text) throw new Error("Resposta vazia da IA.");
+  return text;
+}
+
+async function complete(system: string, user: string): Promise<string> {
+  const provider = getProvider();
+  const model = provider === "openai" ? POSTADOR_IA_MODEL_OPENAI : POSTADOR_IA_MODEL_CLAUDE;
+  if (provider === "claude") return callClaude(system, user, model);
+  return callOpenAI(system, user, model);
 }
 
 /**
  * Gera caption para Instagram a partir da descrição do usuário.
- * Tudo no nosso sistema — sem n8n.
+ * Usa seu prompt estruturado (adaptado do Postador n8n), 100% no nosso sistema.
  */
 export async function gerarCaption(descricao: string, mediaType?: "IMAGE" | "REELS"): Promise<string> {
-  const openai = getClient();
   const tipo = mediaType === "REELS" ? "Reels (vídeo)" : "post de imagem";
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: `Você é um redator de redes sociais. Gere legendas para Instagram em português do Brasil.
-Regras: texto envolvente e profissional; inclua 5 a 10 hashtags relevantes no final, separadas por espaço; não repita a descrição literalmente — use como base para criar uma legenda atrativa; tom adequado para negócios/imóveis/marketing.`,
-      },
-      {
-        role: "user",
-        content: `Gere a legenda para um ${tipo} no Instagram com base nesta descrição:\n\n${descricao}`,
-      },
-    ],
-    max_tokens: 500,
-  });
-  const text = res.choices[0]?.message?.content?.trim();
-  if (!text) throw new Error("Resposta vazia da IA.");
-  return text;
+  const user = `Conteúdo de entrada para criação do post:\n\n""" ${descricao} """\n\nCom base nesse conteúdo, gere UMA legenda final para um ${tipo} no Instagram, já formatada (parágrafos com \\n\\n, emojis, CTA, hashtags no final em bloco). Retorne só a legenda, nada mais.`;
+  return complete(SYSTEM_GERAR, user);
 }
 
 /**
  * Refaz o caption com base no feedback do usuário.
- * Tudo no nosso sistema — sem n8n.
+ * Mantém as regras de formatação do seu fluxo original.
  */
 export async function refazerCaption(captionAtual: string, feedback: string): Promise<string> {
-  const openai = getClient();
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content: `Você ajusta legendas de Instagram conforme o feedback do usuário. Mantenha o tom e o estilo; aplique exatamente o que o usuário pediu; devolva só a nova legenda com hashtags, sem explicação.`,
-      },
-      {
-        role: "user",
-        content: `Legenda atual:\n${captionAtual}\n\nPedido do usuário: ${feedback}\n\nNova legenda:`,
-      },
-    ],
-    max_tokens: 500,
-  });
-  const text = res.choices[0]?.message?.content?.trim();
-  if (!text) throw new Error("Resposta vazia da IA.");
-  return text;
+  const user = `Legenda atual:\n\n${captionAtual}\n\nPedido do usuário: ${feedback}\n\nNova legenda (só o texto formatado):`;
+  return complete(SYSTEM_REFAZER, user);
 }
