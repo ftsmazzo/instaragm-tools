@@ -15,20 +15,43 @@ function mockRefazerCaption(captionAtual: string, feedback: string): string {
 }
 
 export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
-  // POST /api/postador/gerar-caption — JSON { descricao } (multipart com arquivo em versão futura)
+  // POST /api/postador/gerar-caption — JSON { descricao } OU multipart (descricao + arquivo opcional)
   fastify.post("/gerar-caption", async (request, reply) => {
-    const body = request.body as { descricao?: string };
-    const descricao = body?.descricao ?? "";
+    const contentType = request.headers["content-type"] ?? "";
+    let descricao = "";
+    let mediaType: "IMAGE" | "REELS" | undefined;
 
-    if (!descricao || descricao.trim() === "") {
+    if (contentType.includes("multipart/form-data")) {
+      const parts = request.parts();
+      for await (const part of parts) {
+        if (part.type === "field" && part.fieldname === "descricao") {
+          descricao = String(part.value ?? "").trim();
+        }
+        if (part.type === "file") {
+          const mimetype = part.mimetype ?? "";
+          if (mimetype.startsWith("video/")) mediaType = "REELS";
+          else if (mimetype.startsWith("image/")) mediaType = "IMAGE";
+          // Consumir o stream (por ora não guardamos em MinIO; quando integrar, fazer upload aqui)
+          const file = part.file;
+          for await (const _ of file) {
+            // drain
+          }
+        }
+      }
+    } else {
+      const body = request.body as { descricao?: string };
+      descricao = (body?.descricao ?? "").trim();
+    }
+
+    if (!descricao) {
       return reply.status(400).send({ error: "Campo 'descricao' é obrigatório" });
     }
 
-    const caption = mockCaption(descricao.trim());
+    const caption = mockCaption(descricao);
     return reply.send({
       caption,
       media_url: undefined,
-      media_type: undefined,
+      media_type: mediaType,
     });
   });
 

@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { healthRoutes } from "./routes/health.js";
 import { configRoutes } from "./routes/config.js";
 import { postagensRoutes } from "./routes/postagens.js";
@@ -13,7 +14,7 @@ async function build() {
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: true });
-  // multipart removido: @fastify/multipart 8.x exige Fastify 4; projeto usa Fastify 5. Postador usa JSON por enquanto.
+  await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB para upload vídeo/imagem do Postador
 
   await app.register(healthRoutes, { prefix: "/" });
   await app.register(configRoutes, { prefix: "/api/config" });
