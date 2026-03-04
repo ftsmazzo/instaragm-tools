@@ -2,44 +2,40 @@
 
 ## Resumo
 
-- **Configuração do Instagram e da empresa** (token, ig_user_id, nome) e o **cronograma** de posts publicados **não usam tabela no banco**. Ficam em **arquivos JSON** dentro da pasta `data/` da API.
-- Você **não precisa preencher em todo post**: configure **uma vez** em **Administração** (token + ID do usuário Instagram) e clique em **Salvar**. A API grava e reutiliza esses dados em todas as publicações.
+- **Configuração do Instagram e da empresa** (token, ig_user_id, nome) e o **cronograma** de posts publicados podem ser gravados **no PostgreSQL** ou em arquivo.
+- Você **não precisa preencher em todo post**: configure **uma vez** em **Administração** (token + ID do usuário Instagram) e clique em **Salvar**. A API reutiliza esses dados em todas as publicações.
 
 ---
 
-## Onde está salvo
+## Como a API decide onde gravar
 
-| Dado | Arquivo | Conteúdo |
-|------|---------|----------|
-| Config (Instagram + empresa) | `data/config.json` | `instagram.access_token`, `instagram.ig_user_id`, `empresa.nome` |
-| Cronograma (posts publicados) | `data/cronograma.json` | Lista de itens com caption, media_url, link_post, data_post, etc. |
+| Situação | Onde grava |
+|----------|------------|
+| **`DATABASE_URL` definida** (ex.: no EasyPanel, variável de ambiente da API) | **PostgreSQL**: tabelas `app_config` e `postador_cronograma`. Nada de volume nem mudança de estrutura no EasyPanel. |
+| **`DATABASE_URL` não definida** (ex.: rodar a API local sem banco) | **Arquivos** em `data/config.json` e `data/cronograma.json`. |
 
-O caminho completo depende do `DATA_DIR` (variável de ambiente). Padrão: **`<raiz do projeto da API>/data/`**.  
-Em Docker, a raiz costuma ser `/app`, então os arquivos ficam em **`/app/data/config.json`** e **`/app/data/cronograma.json`**.
-
----
-
-## Por que não aparece tabela no banco?
-
-A config e o cronograma foram implementados em arquivo para não depender de PostgreSQL no início. O projeto já prevê PostgreSQL para outras coisas (ex.: postagens da raspagem); se no futuro quiser migrar config e cronograma para o banco, dá para criar tabelas e passar a ler/gravar lá.
+Ou seja: basta definir a variável **`DATABASE_URL`** no serviço da API (conexão ao PostgreSQL que você já usa). A API cria as tabelas na primeira vez que precisar e passa a persistir config e cronograma no banco.
 
 ---
 
-## Persistência no EasyPanel (Docker)
+## Tabelas no banco (quando usa PostgreSQL)
 
-Se o serviço da API **não** tiver um **volume** montado na pasta `data/`, essa pasta é **efêmera**: quando o container reinicia, os arquivos são perdidos e você precisaria preencher de novo em Administração.
+- **`app_config`** — chave `config`, valor em JSON: `instagram` (access_token, ig_user_id) e `empresa` (nome).
+- **`postador_cronograma`** — cada linha é um post publicado: id, caption, media_url, media_type, id_container, link_post, data_post, created_at.
 
-**Recomendação:** no EasyPanel, no app da **API**, configure um **volume**:
+As tabelas são criadas automaticamente pela API (`CREATE TABLE IF NOT EXISTS`) ao usar config ou cronograma.
 
-- **Mount path (no container):** `/app/data`
-- **Volume:** use um volume nomeado (ex.: `instagram-api-data`) ou um host path
+---
 
-Assim `config.json` e `cronograma.json` sobrevivem a restarts e você configura o Instagram **uma vez**; as publicações seguem usando essa config até você alterar em Administração.
+## O que fazer no EasyPanel
+
+- **Só adicionar uma variável de ambiente** no serviço da API: **`DATABASE_URL`** com a connection string do PostgreSQL (ex.: `postgresql://user:senha@host:5432/nome_do_banco`).
+- Não é preciso criar volume, nem alterar estrutura de outros projetos. A persistência fica no banco.
 
 ---
 
 ## Resumo prático
 
-1. **Onde:** config e cronograma = arquivos em `data/` (não há tabela no banco para isso).
-2. **Preencher toda vez?** Não. Preencha **uma vez** em Administração e Salvar; a API usa esse arquivo em todos os posts.
-3. **Para não perder ao reiniciar:** monte volume em `/app/data` no container da API no EasyPanel.
+1. **Onde:** com `DATABASE_URL` → PostgreSQL (tabelas `app_config` e `postador_cronograma`). Sem `DATABASE_URL` → arquivos em `data/`.
+2. **Preencher toda vez?** Não. Uma vez em Administração e Salvar; a API usa sempre essa config.
+3. **Para persistir no EasyPanel sem volume:** defina `DATABASE_URL` no app da API.

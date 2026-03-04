@@ -14,10 +14,12 @@
     "@fastify/multipart": "^9.4.0",
     "fastify": "^5.1.0",
     "minio": "^8.0.7",
-    "openai": "^4.73.0"
+    "openai": "^4.73.0",
+    "pg": "^8.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "@types/pg": "^8.18.0",
     "tsx": "^4.19.2",
     "typescript": "~5.6.2"
   }
