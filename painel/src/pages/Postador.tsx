@@ -45,6 +45,7 @@ type Step = "form" | "review" | "published";
 
 export function Postador() {
   const [descricao, setDescricao] = useState("");
+  const [urlImovel, setUrlImovel] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [caption, setCaption] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -154,8 +155,34 @@ export function Postador() {
     }
   };
 
+  const handleGerarPorUrl = async () => {
+    if (!urlImovel.trim()) {
+      setError("Cole o link da página do imóvel.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.postador.gerarPorUrl(
+        urlImovel.trim(),
+        provider,
+        currentModelInList ? model : modelsList[0]?.id ?? model
+      );
+      setCaption(res.caption);
+      setMediaUrl(res.media_url ?? null);
+      setMediaType("IMAGE");
+      setPreviewUrl(res.media_url ?? null);
+      setStep("review");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao gerar post a partir do link.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleNovoPost = () => {
     setDescricao("");
+    setUrlImovel("");
     setArquivo(null);
     setCaption(null);
     setMediaUrl(null);
@@ -253,14 +280,41 @@ export function Postador() {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={handleGerarCaption}
-            disabled={loading || !descricao.trim()}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {loading ? "Gerando..." : "Gerar caption"}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleGerarCaption}
+              disabled={loading || !descricao.trim()}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {loading ? "Gerando..." : "Gerar caption"}
+            </button>
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-gray-200">
+            <p className="text-sm font-medium text-gray-700 mb-2">Ou use o link do imóvel</p>
+            <p className="text-xs text-gray-500 mb-2">
+              Cole a URL da página de detalhes do imóvel. O sistema raspa os dados, baixa a imagem (via Cloudinary) e gera o caption.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="url"
+                value={urlImovel}
+                onChange={(e) => setUrlImovel(e.target.value)}
+                placeholder="https://.../imoveis/..."
+                className="flex-1 min-w-[200px] rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                onClick={handleGerarPorUrl}
+                disabled={loading || !urlImovel.trim()}
+                className="inline-flex items-center px-4 py-2 border border-indigo-200 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {loading ? "Processando..." : "Gerar post do link"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { Readable } from "stream";
 import { gerarCaption as gerarCaptionIA, refazerCaption as refazerCaptionIA } from "../services/caption.js";
 import { isCloudinaryConfigured, uploadBuffer } from "../services/cloudinary.js";
 import { isMinioConfigured, uploadStream } from "../services/minio.js";
+import { rasparPaginaImovel, montarDescricaoParaCaption, baixarEEnviarParaCloudinary } from "../services/imovel.js";
 import { publishToInstagram } from "../services/instagram.js";
 import { loadConfig } from "../store/config.js";
 import { appendCronograma, listCronograma } from "../store/cronograma.js";
@@ -27,6 +28,56 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/cronograma", async (_request, reply) => {
     const list = await listCronograma();
     return reply.send({ cronograma: list, total: list.length });
+  });
+
+  // POST /api/postador/por-url — JSON { url, provider?, model? }. Raspa página do imóvel, baixa imagem → Cloudinary, gera caption.
+  fastify.post("/por-url", async (request, reply) => {
+    const body = request.body as { url?: string; provider?: string; model?: string };
+    const url = body?.url?.trim();
+    if (!url) {
+      return reply.status(400).send({ error: "Campo 'url' é obrigatório (link da página de detalhes do imóvel)." });
+    }
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      return reply.status(400).send({ error: "URL inválida." });
+    }
+    const provider = body?.provider?.trim();
+    const model = body?.model?.trim();
+    const providerNorm = provider === "claude" ? "claude" : undefined;
+
+    try {
+      const dados = await rasparPaginaImovel(url);
+      const descricao = montarDescricaoParaCaption(dados);
+      if (!descricao.trim()) {
+        return reply.status(400).send({ error: "Não foi possível extrair dados da página. Verifique se a URL é de um imóvel." });
+      }
+
+      let mediaUrl: string | undefined;
+      if (dados.imageUrl && isCloudinaryConfigured()) {
+        const { url: cloudUrl } = await baixarEEnviarParaCloudinary(dados.imageUrl);
+        mediaUrl = cloudUrl;
+      }
+
+      const caption = await gerarCaptionIA(descricao, "IMAGE", {
+        provider: providerNorm ?? (provider === "openai" ? "openai" : undefined),
+        model: model || undefined,
+      });
+
+      return reply.send({
+        caption,
+        media_url: mediaUrl ?? undefined,
+        media_type: "IMAGE" as const,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao processar URL do imóvel";
+      if (msg.includes("OPENAI_API_KEY") || msg.includes("ANTHROPIC_API_KEY")) {
+        return reply.status(503).send({ error: msg });
+      }
+      if (msg.includes("Cloudinary")) {
+        return reply.status(503).send({ error: msg });
+      }
+      fastify.log.error({ err }, "por-url");
+      return reply.status(500).send({ error: msg });
+    }
   });
 
   // POST /api/postador/gerar-caption — JSON { descricao, provider?, model? } OU multipart (descricao + arquivo + provider + model)

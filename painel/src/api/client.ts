@@ -109,6 +109,11 @@ export const api = {
         body: { descricao, provider: provider || undefined, model: model || undefined },
       });
     },
+    gerarPorUrl: (url: string, provider?: string | null, model?: string | null) =>
+      fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/por-url", {
+        method: "POST",
+        body: { url, provider: provider || undefined, model: model || undefined },
+      }),
     refazerCaption: (
       caption_atual: string,
       feedback: string,

@@ -39,12 +39,12 @@ O n8n pode ficar apenas para outros fluxos (comentários, Direct, raspagem etc.)
   - **Agendamento / cronograma**: guardar rascunhos ou itens com `data_agendada` e um job (cron) que, na hora programada, publica no Instagram. Assim o usuário pode montar posts e agendar para datas/horários específicos.
   Não é obrigatório para o fluxo mínimo (publicar na hora), mas facilita auditoria e agendamento futuro.
 
-### Recurso futuro: link do imóvel (Imobiliária)
+### Post por URL do imóvel (Imobiliária) — implementado
 
-**Objetivo:** em foco imobiliária, a pessoa poder **colar o link da página de detalhes do imóvel** (ex.: `https://cmr-imobiliaria-site-imoveis.90qhxz.easypanel.host/imoveis/b5ee882c-f801-4488-acfd-bc2ce080af69`) e o sistema:
+**Objetivo:** em foco imobiliária, a pessoa pode **colar o link da página de detalhes do imóvel** (ex.: `https://cmr-imobiliaria-site-imoveis.90qhxz.easypanel.host/imoveis/b5ee882c-f801-4488-acfd-bc2ce080af69`) e o sistema:
 
-1. Acessar a URL e extrair da página: título, descrição, valores (venda, IPTU, condomínio), localização, características, imagem(ns), etc.
-2. Montar a descrição do post (e, se possível, usar a imagem da página) para alimentar o mesmo fluxo do Postador (descrição + mídia opcional → MinIO → Graph API).
+1. Acessar a URL e extrair: título, código, localização, valores, resumo, características, descrição e URL da imagem (suporta Next.js __NEXT_DATA__ e HTML).
+2. Baixar a imagem e fazer upload no Cloudinary (URL pública estável). Gerar legenda com a IA. Endpoint: POST /api/postador/por-url.
 
 Se for complexo incluir de imediato, deixa-se a **possibilidade aberta**: um endpoint alternativo (ex.: `POST /api/postador/por-link`) que recebe `url`, faz fetch da página, parse (scraping ou API do site), gera descrição (+ imagem) e chama o mesmo pipeline de publicação. A tela do Postador pode ganhar um modo “Colar link do imóvel” que envia essa URL.
 
