@@ -1,36 +1,62 @@
 import Minio from "minio";
 import type { Readable } from "stream";
 
+// Suporta tanto as variáveis do Postador quanto as do CRM (MINIO_SERVER_URL, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD)
+const MINIO_SERVER_URL = process.env.MINIO_SERVER_URL ?? "";
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT ?? "";
 const MINIO_PORT = parseInt(process.env.MINIO_PORT ?? "9000", 10);
 const MINIO_USE_SSL = process.env.MINIO_USE_SSL === "true" || process.env.MINIO_USE_SSL === "1";
-const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY ?? "";
-const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY ?? "";
-const MINIO_BUCKET = process.env.MINIO_BUCKET ?? "postador";
-const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL ?? ""; // ex: https://minio.seudominio.com
+const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "";
+const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "";
+const MINIO_BUCKET = process.env.MINIO_BUCKET ?? "crm";
+const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL ?? "";
 
 let client: Minio.Client | null = null;
 
+function parseServerUrl(url: string): { endPoint: string; port: number; useSSL: boolean } {
+  const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+  return {
+    endPoint: u.hostname,
+    port: u.port ? parseInt(u.port, 10) : u.protocol === "https:" ? 443 : 80,
+    useSSL: u.protocol === "https:",
+  };
+}
+
 function getClient(): Minio.Client {
-  if (!MINIO_ENDPOINT.trim()) {
-    throw new Error("MINIO_ENDPOINT não configurado. Defina as variáveis de ambiente MinIO na API.");
+  const accessKey = MINIO_ACCESS_KEY.trim();
+  const secretKey = MINIO_SECRET_KEY.trim();
+  if (!accessKey || !secretKey) {
+    throw new Error("MinIO: defina MINIO_ACCESS_KEY e MINIO_SECRET_KEY (ou MINIO_ROOT_USER e MINIO_ROOT_PASSWORD).");
   }
   if (!client) {
-    const [host] = MINIO_ENDPOINT.split(":");
-    client = new Minio.Client({
-      endPoint: host.trim(),
-      port: MINIO_ENDPOINT.includes(":") ? parseInt(MINIO_ENDPOINT.split(":")[1], 10) : MINIO_PORT,
-      useSSL: MINIO_USE_SSL,
-      accessKey: MINIO_ACCESS_KEY.trim(),
-      secretKey: MINIO_SECRET_KEY.trim(),
-    });
+    if (MINIO_SERVER_URL.trim()) {
+      const { endPoint, port, useSSL } = parseServerUrl(MINIO_SERVER_URL.trim());
+      client = new Minio.Client({
+        endPoint,
+        port,
+        useSSL,
+        accessKey,
+        secretKey,
+      });
+    } else if (MINIO_ENDPOINT.trim()) {
+      const [host] = MINIO_ENDPOINT.split(":");
+      client = new Minio.Client({
+        endPoint: host.trim(),
+        port: MINIO_ENDPOINT.includes(":") ? parseInt(MINIO_ENDPOINT.split(":")[1], 10) : MINIO_PORT,
+        useSSL: MINIO_USE_SSL,
+        accessKey,
+        secretKey,
+      });
+    } else {
+      throw new Error("MinIO: defina MINIO_SERVER_URL (ex.: https://cmr-imobiliaria-minio.90qhxz.easypanel.host) ou MINIO_ENDPOINT.");
+    }
   }
   return client;
 }
 
 function getPublicUrl(objectName: string): string {
-  if (MINIO_PUBLIC_URL) {
-    const base = MINIO_PUBLIC_URL.replace(/\/$/, "");
+  const base = (MINIO_PUBLIC_URL || MINIO_SERVER_URL).trim().replace(/\/$/, "");
+  if (base) {
     return `${base}/${MINIO_BUCKET}/${objectName}`;
   }
   const proto = MINIO_USE_SSL ? "https" : "http";
@@ -39,9 +65,10 @@ function getPublicUrl(objectName: string): string {
 }
 
 export function isMinioConfigured(): boolean {
-  return Boolean(
-    MINIO_ENDPOINT?.trim() && MINIO_ACCESS_KEY?.trim() && MINIO_SECRET_KEY?.trim()
-  );
+  const accessKey = (MINIO_ACCESS_KEY || (process.env.MINIO_ROOT_USER ?? "")).trim();
+  const secretKey = (MINIO_SECRET_KEY || (process.env.MINIO_ROOT_PASSWORD ?? "")).trim();
+  const hasUrl = MINIO_SERVER_URL.trim() || MINIO_ENDPOINT.trim();
+  return Boolean(hasUrl && accessKey && secretKey);
 }
 
 /**
@@ -57,6 +84,7 @@ async function ensureBucket(): Promise<void> {
 
 /**
  * Faz upload de um stream para o MinIO e retorna a URL pública do objeto.
+ * Os objetos do Postador ficam sob o prefixo postador/ no bucket (ex.: crm/postador/xxx.jpg).
  */
 export async function uploadStream(
   stream: Readable,
