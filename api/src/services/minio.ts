@@ -1,5 +1,8 @@
-import Minio from "minio";
+import * as MinioNamespace from "minio";
 import type { Readable } from "stream";
+
+// Em ESM o pacote minio pode não expor default; usar namespace ou default conforme o runtime
+const Minio = (MinioNamespace as unknown as { default?: typeof MinioNamespace }).default ?? MinioNamespace;
 
 // Suporta tanto as variáveis do Postador quanto as do CRM (MINIO_SERVER_URL, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD)
 const MINIO_SERVER_URL = process.env.MINIO_SERVER_URL ?? "";
@@ -11,7 +14,7 @@ const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY ?? process.env.MINIO_ROOT_
 const MINIO_BUCKET = process.env.MINIO_BUCKET ?? "crm";
 const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_URL ?? "";
 
-let client: Minio.Client | null = null;
+let client: InstanceType<typeof Minio.Client> | null = null;
 
 function parseServerUrl(url: string): { endPoint: string; port: number; useSSL: boolean } {
   const u = new URL(url.startsWith("http") ? url : `https://${url}`);
@@ -22,7 +25,7 @@ function parseServerUrl(url: string): { endPoint: string; port: number; useSSL: 
   };
 }
 
-function getClient(): Minio.Client {
+function getClient(): InstanceType<typeof Minio.Client> {
   const accessKey = MINIO_ACCESS_KEY.trim();
   const secretKey = MINIO_SECRET_KEY.trim();
   if (!accessKey || !secretKey) {
