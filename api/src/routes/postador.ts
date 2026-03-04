@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { Readable } from "stream";
 import { gerarCaption as gerarCaptionIA, refazerCaption as refazerCaptionIA } from "../services/caption.js";
+import { isCloudinaryConfigured, uploadBuffer } from "../services/cloudinary.js";
 import { isMinioConfigured, uploadStream } from "../services/minio.js";
 import { publishToInstagram } from "../services/instagram.js";
 import { loadConfig } from "../store/config.js";
@@ -50,14 +51,16 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
           const mimetype = part.mimetype ?? "application/octet-stream";
           if (mimetype.startsWith("video/")) mediaType = "REELS";
           else if (mimetype.startsWith("image/")) mediaType = "IMAGE";
-          if (isMinioConfigured()) {
-            const chunks: Buffer[] = [];
-            for await (const chunk of part.file) {
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-            }
-            const stream = Readable.from(Buffer.concat(chunks));
-            const ext = extFromMimetype(mimetype);
-            mediaUrl = await uploadStream(stream, mimetype, ext);
+          const chunks: Buffer[] = [];
+          for await (const chunk of part.file) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const buffer = Buffer.concat(chunks);
+          const ext = extFromMimetype(mimetype);
+          if (isCloudinaryConfigured()) {
+            mediaUrl = await uploadBuffer(buffer, mimetype, ext);
+          } else if (isMinioConfigured()) {
+            mediaUrl = await uploadStream(Readable.from(buffer), mimetype, ext);
           }
         }
       }
@@ -88,7 +91,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       if (msg.includes("OPENAI_API_KEY") || msg.includes("ANTHROPIC_API_KEY")) {
         return reply.status(503).send({ error: msg });
       }
-      if (msg.includes("MINIO")) {
+      if (msg.includes("MINIO") || msg.includes("CLOUDINARY")) {
         return reply.status(503).send({ error: msg });
       }
       fastify.log.error({ err }, "gerar-caption");

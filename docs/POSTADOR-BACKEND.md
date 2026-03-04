@@ -185,7 +185,8 @@ Nada disso exige o n8n; o fluxo do Postador fica inteiro no nosso sistema.
 
 - **API** (`api/`): geração e refino de caption via **OpenAI/Claude** no backend (`api/src/services/caption.ts`). Rotas: `POST /api/postador/gerar-caption` (multipart: descricao + arquivo → upload MinIO e retorno de `media_url`), `POST /api/postador/refazer-caption`, `POST /api/postador/publicar` (Graph API com token e ig_user_id da config), `GET /api/postador/cronograma` (lista de posts finalizados).
 - **Config** persistida em arquivo (`data/config.json`): instagram (access_token, ig_user_id) e empresa (nome). Definida em **Administração** no painel.
-- **MinIO**: upload de mídia em `gerar-caption`; URL pública retornada para o Instagram acessar na publicação. Variáveis: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_PUBLIC_URL`.
+- **Cloudinary** (prioridade se configurado): upload em `gerar-caption` com URLs públicas estáveis (como no workflow n8n). Variáveis: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET` (ex.: n8nimage). Não expira.
+- **MinIO** (fallback): upload de mídia; URL pública. Variáveis: `MINIO_INTERNAL_URL`, `MINIO_PUBLIC_URL`, etc. Se o bucket for privado ou a URL expirar, use Cloudinary.
 - **Instagram Graph API**: criação de container (imagem ou Reels) e publicação; Reels aguardam processamento antes de `media_publish`. Credenciais vêm da config (Administração).
 - **Cronograma**: cada post publicado é gravado em `data/cronograma.json` (caption, media_url, link_post, data_post, etc.); listado no painel na tela Postador.
 - **Painel**: Administração com **Token de acesso** e **ID do usuário Instagram**; Postador com seletor de IA, upload de arquivo, aprovação, publicação e lista de cronograma.
