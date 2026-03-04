@@ -1,6 +1,24 @@
 import { parse } from "node-html-parser";
 import { isCloudinaryConfigured, uploadBuffer } from "./cloudinary.js";
 
+// Dentro do EasyPanel a API não resolve o host público do site. Use URL interna para o fetch.
+const SITE_IMOVEIS_PUBLIC_HOST = (process.env.SITE_IMOVEIS_PUBLIC_HOST ?? "").trim().toLowerCase();
+const SITE_IMOVEIS_INTERNAL_ORIGIN = (process.env.SITE_IMOVEIS_INTERNAL_ORIGIN ?? "").trim();
+
+function urlParaFetch(userUrl: string): string {
+  if (!SITE_IMOVEIS_PUBLIC_HOST || !SITE_IMOVEIS_INTERNAL_ORIGIN) return userUrl;
+  try {
+    const u = new URL(userUrl);
+    if (u.hostname.toLowerCase() === SITE_IMOVEIS_PUBLIC_HOST) {
+      const internal = SITE_IMOVEIS_INTERNAL_ORIGIN.replace(/\/$/, "");
+      return `${internal}${u.pathname}${u.search}`;
+    }
+  } catch {
+    // ignore
+  }
+  return userUrl;
+}
+
 export type ImovelDados = {
   titulo: string;
   codigo: string;
@@ -27,7 +45,8 @@ function resolveUrl(base: string, path: string): string {
  * Tenta primeiro __NEXT_DATA__ (Next.js), depois meta/og e parsing HTML.
  */
 export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
-  const res = await fetch(url, {
+  const fetchUrl = urlParaFetch(url);
+  const res = await fetch(fetchUrl, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; PostadorImovel/1.0)" },
   });
   if (!res.ok) throw new Error(`Não foi possível acessar a página: ${res.status}`);
@@ -59,6 +78,7 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
         const img = imovel.imagem ?? imovel.foto ?? imovel.image ?? imovel.images;
         if (typeof img === "string") imageUrl = img.startsWith("http") ? img : new URL(img, baseUrl).href;
         else if (Array.isArray(img) && img[0]) imageUrl = String(img[0]).startsWith("http") ? String(img[0]) : new URL(String(img[0]), baseUrl).href;
+        if (imageUrl) imageUrl = urlParaFetch(imageUrl);
         return {
           titulo,
           codigo,
@@ -92,7 +112,8 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
     root.querySelector("img[src*='imoveis'], img[src*='upload'], .gallery img, [data-imagem]")?.getAttribute("src") ||
     root.querySelector("img")?.getAttribute("src") ||
     null;
-  const absoluteImageUrl = imageUrl ? resolveUrl(url, imageUrl) : null;
+  let absoluteImageUrl: string | null = imageUrl ? resolveUrl(url, imageUrl) : null;
+  if (absoluteImageUrl) absoluteImageUrl = urlParaFetch(absoluteImageUrl);
 
   // Título: h1 ou og:title ou title
   const titulo =
