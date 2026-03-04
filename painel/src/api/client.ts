@@ -16,7 +16,11 @@ async function fetchJson<T>(path: string, options?: FetchOptions): Promise<T> {
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    const msg = (errBody as { error?: string }).error ?? `API ${res.status}: ${res.statusText}`;
+    throw new Error(msg);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -91,8 +95,12 @@ export const api = {
         return fetch(`${base}/api/postador/gerar-caption`, {
           method: "POST",
           body: form,
-        }).then((res) => {
-          if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+        }).then(async (res) => {
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            const msg = (errBody as { error?: string }).error ?? `API ${res.status}: ${res.statusText}`;
+            throw new Error(msg);
+          }
           return res.json() as Promise<{ caption: string; media_url?: string; media_type?: string }>;
         });
       }

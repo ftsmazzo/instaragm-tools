@@ -144,9 +144,11 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     const mediaType = (body?.media_type === "REELS" ? "REELS" : "IMAGE") as "IMAGE" | "REELS";
 
     if (!caption.trim()) {
+      fastify.log.info({ reason: "caption_empty" }, "publicar 400");
       return reply.status(400).send({ error: "Campo 'caption' é obrigatório para publicar" });
     }
     if (!mediaUrl) {
+      fastify.log.info({ reason: "media_url_missing" }, "publicar 400");
       return reply.status(400).send({
         error: "Para publicar no feed é necessário uma imagem ou vídeo. Envie um arquivo ao gerar o caption.",
       });
@@ -156,6 +158,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     const token = config.instagram?.access_token?.trim();
     const igUserId = config.instagram?.ig_user_id?.trim();
     if (!token || !igUserId) {
+      fastify.log.info({ reason: "instagram_credentials_missing", hasToken: Boolean(token), hasIgUserId: Boolean(igUserId) }, "publicar 400");
       return reply.status(400).send({
         error: "Configure as credenciais do Instagram em Administração: token de acesso e ID do usuário Instagram.",
       });
