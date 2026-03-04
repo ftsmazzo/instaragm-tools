@@ -31,10 +31,11 @@ Agente-Instagram/
 └── README.md
 ```
 
-## Postador (primeira versão)
+## Postador
 
-- **Painel:** tela Postador com descrição, botão "Gerar caption", revisão do caption em tela, opção "Quero alterar" (feedback para refazer) e "Aprovar e publicar".
-- **API:** `POST /api/postador/gerar-caption`, `POST /api/postador/refazer-caption`, `POST /api/postador/publicar`. Por ora respostas mock. Ver `docs/POSTADOR-BACKEND.md` para evolução (MinIO, IA, agendamento).
+- **Painel:** tela Postador com descrição, upload opcional de imagem/vídeo, seletor de IA (OpenAI/Claude e modelo), "Gerar caption", revisão e "Quero alterar" ou "Aprovar e publicar". Lista de **cronograma** (posts já publicados) na mesma tela.
+- **Administração:** em Administração configure o **token de acesso** e o **ID do usuário Instagram** (Graph API) para permitir publicar.
+- **API:** `POST /api/postador/gerar-caption` (multipart: descricao + arquivo → MinIO e caption por IA), `POST /api/postador/refazer-caption`, `POST /api/postador/publicar` (Graph API), `GET /api/postador/cronograma`. Config e cronograma persistidos em `data/` (configurar MinIO e variáveis; ver `api/.env.example` e `docs/POSTADOR-BACKEND.md`).
 
 ## Como rodar local
 
@@ -52,7 +53,7 @@ cd api
 npm install
 npm run dev
 ```
-A API sobe em `http://localhost:3000`. Endpoints: `GET /`, `GET /health`, `GET /api/config`, `GET /api/postagens`, `GET /api/agentes/*`, `POST /api/postador/gerar-caption`, `POST /api/postador/refazer-caption`, `POST /api/postador/publicar`.
+A API sobe em `http://localhost:3000`. Endpoints: `GET /health`, `GET/PUT /api/config`, `GET /api/postagens`, `POST /api/postagens/raspar`, `GET /api/postador/cronograma`, `POST /api/postador/gerar-caption`, `POST /api/postador/refazer-caption`, `POST /api/postador/publicar`. Para mídia no Postador, configure MinIO; para publicar no Instagram, preencha token e ig_user_id em Administração.
 
 ## Deploy (EasyPanel)
 

@@ -22,8 +22,19 @@ async function fetchJson<T>(path: string, options?: FetchOptions): Promise<T> {
 
 export type Health = { status: string; timestamp: string };
 export type Config = {
-  instagram: { connected: boolean };
+  instagram: { connected: boolean; ig_user_id?: string; access_token?: string };
   empresa: { nome: string };
+};
+
+export type CronogramaItem = {
+  id: string;
+  caption: string;
+  media_url: string | null;
+  media_type: "IMAGE" | "REELS" | null;
+  id_container: string | null;
+  link_post: string | null;
+  data_post: string;
+  created_at: string;
 };
 
 export type Postagem = {
@@ -102,9 +113,11 @@ export const api = {
         body: { caption_atual, feedback, refazer_midia, provider: provider || undefined, model: model || undefined },
       }),
     publicar: (caption: string, media_url?: string, media_type?: string) =>
-      fetchJson<{ ok: boolean; id_container?: string; message?: string }>("/api/postador/publicar", {
+      fetchJson<{ ok: boolean; id_container?: string; id_media?: string; link_post?: string; message?: string }>("/api/postador/publicar", {
         method: "POST",
         body: { caption, media_url, media_type },
       }),
+    getCronograma: () =>
+      fetchJson<{ cronograma: CronogramaItem[]; total: number }>("/api/postador/cronograma"),
   },
 };

@@ -9,7 +9,8 @@ function PageAdmin() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nome, setNome] = useState("");
-  const [instagramConnected, setInstagramConnected] = useState(false);
+  const [instagramToken, setInstagramToken] = useState("");
+  const [instagramIgUserId, setInstagramIgUserId] = useState("");
 
   useEffect(() => {
     api
@@ -17,7 +18,8 @@ function PageAdmin() {
       .then((data) => {
         setConfig(data);
         setNome(data.empresa.nome ?? "");
-        setInstagramConnected(data.instagram?.connected ?? false);
+        setInstagramIgUserId(data.instagram?.ig_user_id ?? "");
+        // Token não é retornado pelo GET (segurança); manter campo vazio ou não alterar estado
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao carregar"))
       .finally(() => setLoading(false));
@@ -26,12 +28,15 @@ function PageAdmin() {
   const handleSave = () => {
     setSaving(true);
     setError(null);
+    const instagramPayload: { access_token?: string; ig_user_id?: string } = {};
+    if (instagramIgUserId.trim()) instagramPayload.ig_user_id = instagramIgUserId.trim();
+    if (instagramToken.trim()) instagramPayload.access_token = instagramToken.trim();
     api
       .putConfig({
         empresa: { nome },
-        instagram: { connected: instagramConnected },
+        instagram: { connected: Boolean(instagramToken.trim() && instagramIgUserId.trim()), ...instagramPayload },
       })
-      .then(() => setConfig({ empresa: { nome }, instagram: { connected: instagramConnected } }))
+      .then((res) => setConfig({ empresa: { nome }, instagram: res.received?.instagram ?? { connected: false } }))
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao salvar"))
       .finally(() => setSaving(false));
   };
@@ -67,18 +72,31 @@ function PageAdmin() {
             placeholder="Ex.: Minha Empresa"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Instagram — Token de acesso</label>
           <input
-            type="checkbox"
-            id="instagram"
-            checked={instagramConnected}
-            onChange={(e) => setInstagramConnected(e.target.checked)}
-            className="rounded border-gray-300"
+            type="password"
+            value={instagramToken}
+            onChange={(e) => setInstagramToken(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+            placeholder="Token de longa duração (Graph API)"
           />
-          <label htmlFor="instagram" className="text-sm text-gray-700">
-            Instagram conectado
-          </label>
+          <p className="mt-1 text-xs text-gray-500">Usado para publicar posts pelo Postador. Não é exibido após salvar.</p>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Instagram — ID do usuário (ig_user_id)</label>
+          <input
+            type="text"
+            value={instagramIgUserId}
+            onChange={(e) => setInstagramIgUserId(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Ex.: 17841400008460056"
+          />
+          <p className="mt-1 text-xs text-gray-500">ID numérico da conta profissional Instagram vinculada à página.</p>
+        </div>
+        {config?.instagram?.connected && (
+          <p className="text-sm text-green-600">Instagram configurado para publicar.</p>
+        )}
         <button
           type="button"
           onClick={handleSave}

@@ -47,12 +47,14 @@ export function Postador() {
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [caption, setCaption] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"IMAGE" | "REELS" | undefined>(undefined);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [publishedId, setPublishedId] = useState<string | null>(null);
+  const [linkPost, setLinkPost] = useState<string | null>(null);
 
   const [provider, setProvider] = useState(loadSavedIA().provider);
   const [model, setModel] = useState(loadSavedIA().model);
@@ -84,9 +86,12 @@ export function Postador() {
       );
       setCaption(res.caption);
       setMediaUrl(res.media_url ?? null);
+      setMediaType(res.media_type === "REELS" ? "REELS" : res.media_type === "IMAGE" ? "IMAGE" : undefined);
       if (arquivo && arquivo.type.startsWith("image/")) {
         const url = URL.createObjectURL(arquivo);
         setPreviewUrl(url);
+      } else if (res.media_url && res.media_type === "IMAGE") {
+        setPreviewUrl(res.media_url);
       } else {
         setPreviewUrl(null);
       }
@@ -126,15 +131,20 @@ export function Postador() {
 
   const handlePublicar = async () => {
     if (!caption) return;
+    if (!mediaUrl) {
+      setError("Para publicar no feed é necessário uma imagem ou vídeo. Envie um arquivo ao gerar o caption (e configure o MinIO na API).");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       const res = await api.postador.publicar(
         caption,
-        mediaUrl ?? undefined,
-        undefined
+        mediaUrl,
+        mediaType ?? "IMAGE"
       );
       setPublishedId(res.id_container ?? null);
+      setLinkPost(res.link_post ?? null);
       setStep("published");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao publicar.");
@@ -148,9 +158,11 @@ export function Postador() {
     setArquivo(null);
     setCaption(null);
     setMediaUrl(null);
+    setMediaType(undefined);
     setPreviewUrl(null);
     setFeedback("");
     setPublishedId(null);
+    setLinkPost(null);
     setStep("form");
     setError(null);
   };
@@ -264,19 +276,22 @@ export function Postador() {
           {(previewUrl || mediaUrl || (arquivo && arquivo.type.startsWith("video/"))) && (
             <div>
               <span className="block text-sm font-medium text-gray-700 mb-1">Mídia do post</span>
-              {previewUrl || mediaUrl ? (
+              {mediaType === "REELS" || arquivo?.type.startsWith("video/") ? (
+                <p className="text-sm text-gray-600 py-2">Vídeo: {arquivo?.name ?? "Enviado"}</p>
+              ) : (previewUrl || mediaUrl) ? (
                 <img src={previewUrl ?? mediaUrl ?? ""} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
-              ) : arquivo?.type.startsWith("video/") ? (
-                <p className="text-sm text-gray-600 py-2">Vídeo: {arquivo.name}</p>
               ) : null}
             </div>
           )}
           <div className="flex flex-wrap gap-3">
+            {!mediaUrl && (
+              <p className="text-amber-700 text-sm">Envie uma imagem ou vídeo ao gerar o caption para poder publicar (e configure MinIO na API).</p>
+            )}
             <button
               type="button"
               onClick={handlePublicar}
-              disabled={loading}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+              disabled={loading || !mediaUrl}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Publicando..." : "Aprovar e publicar"}
             </button>
@@ -308,6 +323,13 @@ export function Postador() {
           {publishedId && (
             <p className="text-green-700 text-sm mt-1">ID: {publishedId}</p>
           )}
+          {linkPost && (
+            <p className="mt-2">
+              <a href={linkPost} target="_blank" rel="noopener noreferrer" className="text-green-700 underline">
+                Ver no Instagram
+              </a>
+            </p>
+          )}
           <button
             type="button"
             onClick={handleNovoPost}
@@ -316,6 +338,55 @@ export function Postador() {
             Criar outro post
           </button>
         </div>
+      )}
+
+      <CronogramaList />
+    </div>
+  );
+}
+
+function CronogramaList() {
+  const [list, setList] = useState<Array<{ id: string; caption: string; media_url: string | null; link_post: string | null; data_post: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.postador
+      .getCronograma()
+      .then((r) => setList(r.cronograma ?? []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  if (list.length === 0 && !loading) return null;
+
+  return (
+    <div className="mt-10 pt-6 border-t border-gray-200">
+      <h2 className="text-lg font-semibold text-gray-900 mb-2">Cronograma / posts publicados</h2>
+      {loading ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : (
+        <ul className="space-y-2 max-h-64 overflow-y-auto">
+          {list.map((item) => (
+            <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm border-b border-gray-100 pb-2">
+              <span className="text-gray-500 shrink-0">
+                {new Date(item.data_post).toLocaleString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span className="truncate max-w-[200px] text-gray-700" title={item.caption}>
+                {item.caption.length > 50 ? `${item.caption.slice(0, 50)}…` : item.caption}
+              </span>
+              {item.link_post && (
+                <a href={item.link_post} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline shrink-0">
+                  Ver
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
