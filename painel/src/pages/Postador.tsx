@@ -1,5 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../api/client";
+
+const STORAGE_KEY = "postador_ia";
+
+const PROVIDERS = [
+  { id: "openai", label: "OpenAI (GPT)" },
+  { id: "claude", label: "Claude (Anthropic)" },
+] as const;
+
+const MODELS_OPENAI = [
+  { id: "gpt-4o", label: "GPT-4o" },
+  { id: "gpt-4o-mini", label: "GPT-4o Mini" },
+  { id: "gpt-4-turbo", label: "GPT-4 Turbo" },
+];
+
+const MODELS_CLAUDE = [
+  { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
+  { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+  { id: "claude-3-opus-20240229", label: "Claude 3 Opus" },
+];
+
+function loadSavedIA(): { provider: string; model: string } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { provider?: string; model?: string };
+      if (parsed.provider && parsed.model) return { provider: parsed.provider, model: parsed.model };
+    }
+  } catch {
+    // ignore
+  }
+  return { provider: "openai", model: "gpt-4o" };
+}
+
+function saveIA(provider: string, model: string) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ provider, model }));
+  } catch {
+    // ignore
+  }
+}
 
 type Step = "form" | "review" | "published";
 
@@ -15,6 +55,20 @@ export function Postador() {
   const [feedback, setFeedback] = useState("");
   const [publishedId, setPublishedId] = useState<string | null>(null);
 
+  const [provider, setProvider] = useState(loadSavedIA().provider);
+  const [model, setModel] = useState(loadSavedIA().model);
+
+  const modelsList = provider === "claude" ? MODELS_CLAUDE : MODELS_OPENAI;
+  const currentModelInList = modelsList.some((m) => m.id === model);
+
+  useEffect(() => {
+    saveIA(provider, model);
+  }, [provider, model]);
+
+  useEffect(() => {
+    if (!currentModelInList && modelsList.length) setModel(modelsList[0].id);
+  }, [provider]);
+
   const handleGerarCaption = async () => {
     if (!descricao.trim()) {
       setError("Informe a descrição do que deseja postar.");
@@ -23,7 +77,12 @@ export function Postador() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.postador.gerarCaption(descricao.trim(), arquivo ?? undefined);
+      const res = await api.postador.gerarCaption(
+        descricao.trim(),
+        arquivo ?? undefined,
+        provider,
+        currentModelInList ? model : modelsList[0]?.id ?? model
+      );
       setCaption(res.caption);
       setMediaUrl(res.media_url ?? null);
       if (arquivo && arquivo.type.startsWith("image/")) {
@@ -47,8 +106,15 @@ export function Postador() {
     }
     setError(null);
     setLoading(true);
+    const effectiveModel = currentModelInList ? model : modelsList[0]?.id ?? model;
     try {
-      const res = await api.postador.refazerCaption(caption, feedback.trim());
+      const res = await api.postador.refazerCaption(
+        caption,
+        feedback.trim(),
+        undefined,
+        provider,
+        effectiveModel
+      );
       setCaption(res.caption);
       setMediaUrl(res.media_url ?? null);
       setFeedback("");
@@ -105,6 +171,44 @@ export function Postador() {
 
       {step === "form" && (
         <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-1">
+                Provedor de IA
+              </label>
+              <select
+                id="provider"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+                disabled={loading}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                {PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-1">
+                Modelo / versão
+              </label>
+              <select
+                id="model"
+                value={currentModelInList ? model : modelsList[0]?.id ?? ""}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={loading}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                {modelsList.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div>
             <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">
               Descrição do post *

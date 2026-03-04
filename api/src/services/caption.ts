@@ -1,19 +1,15 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
 
-// Variáveis de ambiente para o Postador (IA)
+// Chaves de API (obrigatórias conforme o provedor usado). Escolha de provedor/modelo vem do painel.
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const POSTADOR_IA_PROVIDER = (process.env.POSTADOR_IA_PROVIDER ?? "openai").toLowerCase();
-const POSTADOR_IA_MODEL_OPENAI = process.env.POSTADOR_IA_MODEL_OPENAI ?? "gpt-4o";
-const POSTADOR_IA_MODEL_CLAUDE = process.env.POSTADOR_IA_MODEL_CLAUDE ?? "claude-sonnet-4-5-20250929";
+// Fallback só quando o painel não envia provider/model (ex.: chamada direta à API).
+const DEFAULT_PROVIDER = (process.env.POSTADOR_IA_PROVIDER ?? "openai").toLowerCase() as "openai" | "claude";
+const DEFAULT_MODEL_OPENAI = process.env.POSTADOR_IA_MODEL_OPENAI ?? "gpt-4o";
+const DEFAULT_MODEL_CLAUDE = process.env.POSTADOR_IA_MODEL_CLAUDE ?? "claude-sonnet-4-5-20250929";
 
-type Provider = "openai" | "claude";
-
-function getProvider(): Provider {
-  if (POSTADOR_IA_PROVIDER === "claude") return "claude";
-  return "openai";
-}
+export type Provider = "openai" | "claude";
 
 function getOpenAI(): OpenAI {
   if (!OPENAI_API_KEY?.trim()) {
@@ -42,7 +38,7 @@ const SYSTEM_GERAR = `Você é um especialista em criação de conteúdo para In
 2. Gerar um texto contínuo, engajador e emocionalmente conectado — despertar empatia e capturar a atenção nos primeiros segundos.
 3. Apresentar mensagem central clara, com storytelling e copywriting — estabelecer conexão emocional e relevância com o público-alvo.
 4. Incluir proposta de valor, reflexão, aprendizado ou informação relevante — estimular compartilhamento, comentários e retenção.
-5. Finalizar com CTA forte e autêntica — incentivar interação (curtir, comentar, compartilhar ou marcar).
+5. Finalizar com CTA que incentive especialmente a **comentar no post** — assim o agente de comentários pode entrar em ação (ex.: "Comente abaixo o que achou", "Deixe seu comentário", "Responda nos comentários").
 6. Incluir até 10 hashtags relevantes e de alto alcance — ampliar visibilidade e alcance orgânico.
 </workflow>
 
@@ -57,19 +53,19 @@ const SYSTEM_GERAR = `Você é um especialista em criação de conteúdo para In
 - Se o conteúdo contiver versículos bíblicos, reflexões, ideias motivacionais ou mensagens inspiradoras, valorize com boas pausas e espaçamento.
 </regras>
 
-<output>Retorne somente a legenda final formatada, com emojis equilibrados, parágrafos separados por \\n\\n, CTA envolvente ao final do texto e hashtags agrupadas no fim. Nada mais.</output>`;
+<output>Retorne somente a legenda final formatada, com emojis equilibrados, parágrafos separados por \\n\\n, CTA que convide a comentar no post (para o agente atuar) e hashtags agrupadas no fim. Nada mais.</output>`;
 
 // Refazer: regras do seu "Formatar texto" + aplicar feedback do usuário.
 const SYSTEM_REFAZER = `Você é um especialista em escrita criativa para redes sociais, focado em formatação perfeita de legendas para Instagram, ideais para a Graph API.
 
 Seu objetivo é ajustar a legenda conforme o pedido do usuário, mantendo estrutura visualmente bonita, legível e engajadora.
 
-Regras: use \\n\\n entre parágrafos; distribua emojis de forma natural; preserve o tom emocional; valorize reflexões ou mensagens inspiradoras com boas pausas; finalize com CTA envolvente; hashtags todas no final, em bloco compacto; resultado limpo, sem aspas ou escapes. Retorne somente a nova legenda formatada, nada mais.`;
+Regras: use \\n\\n entre parágrafos; distribua emojis de forma natural; preserve o tom emocional; valorize reflexões ou mensagens inspiradoras com boas pausas; finalize com CTA que convide a comentar no post (para o agente atuar); hashtags todas no final, em bloco compacto; resultado limpo, sem aspas ou escapes. Retorne somente a nova legenda formatada, nada mais.`;
 
 async function callOpenAI(system: string, user: string, model: string): Promise<string> {
   const openai = getOpenAI();
   const res = await openai.chat.completions.create({
-    model: model || POSTADOR_IA_MODEL_OPENAI,
+    model: model || DEFAULT_MODEL_OPENAI,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -84,7 +80,7 @@ async function callOpenAI(system: string, user: string, model: string): Promise<
 async function callClaude(system: string, user: string, model: string): Promise<string> {
   const anthropic = getAnthropic();
   const res = await anthropic.messages.create({
-    model: model || POSTADOR_IA_MODEL_CLAUDE,
+    model: model || DEFAULT_MODEL_CLAUDE,
     max_tokens: 800,
     system,
     messages: [{ role: "user", content: user }],
@@ -95,28 +91,46 @@ async function callClaude(system: string, user: string, model: string): Promise<
   return text;
 }
 
-async function complete(system: string, user: string): Promise<string> {
-  const provider = getProvider();
-  const model = provider === "openai" ? POSTADOR_IA_MODEL_OPENAI : POSTADOR_IA_MODEL_CLAUDE;
-  if (provider === "claude") return callClaude(system, user, model);
-  return callOpenAI(system, user, model);
+async function complete(
+  system: string,
+  user: string,
+  provider?: Provider | null,
+  model?: string | null
+): Promise<string> {
+  const p: Provider = provider === "claude" ? "claude" : "openai";
+  const m = (model?.trim() || (p === "openai" ? DEFAULT_MODEL_OPENAI : DEFAULT_MODEL_CLAUDE)) as string;
+  if (p === "claude") return callClaude(system, user, m);
+  return callOpenAI(system, user, m);
 }
+
+export type GerarCaptionOptions = {
+  provider?: Provider | null;
+  model?: string | null;
+};
 
 /**
  * Gera caption para Instagram a partir da descrição do usuário.
- * Usa seu prompt estruturado (adaptado do Postador n8n), 100% no nosso sistema.
+ * provider e model vêm do painel (seletor); se não enviados, usa fallback das variáveis de ambiente.
  */
-export async function gerarCaption(descricao: string, mediaType?: "IMAGE" | "REELS"): Promise<string> {
+export async function gerarCaption(
+  descricao: string,
+  mediaType?: "IMAGE" | "REELS",
+  options?: GerarCaptionOptions
+): Promise<string> {
   const tipo = mediaType === "REELS" ? "Reels (vídeo)" : "post de imagem";
-  const user = `Conteúdo de entrada para criação do post:\n\n""" ${descricao} """\n\nCom base nesse conteúdo, gere UMA legenda final para um ${tipo} no Instagram, já formatada (parágrafos com \\n\\n, emojis, CTA, hashtags no final em bloco). Retorne só a legenda, nada mais.`;
-  return complete(SYSTEM_GERAR, user);
+  const user = `Conteúdo de entrada para criação do post:\n\n""" ${descricao} """\n\nCom base nesse conteúdo, gere UMA legenda final para um ${tipo} no Instagram, já formatada (parágrafos com \\n\\n, emojis, CTA que convide a comentar, hashtags no final em bloco). Retorne só a legenda, nada mais.`;
+  return complete(SYSTEM_GERAR, user, options?.provider, options?.model);
 }
 
 /**
  * Refaz o caption com base no feedback do usuário.
- * Mantém as regras de formatação do seu fluxo original.
+ * provider e model vêm do painel (mesma escolha da geração).
  */
-export async function refazerCaption(captionAtual: string, feedback: string): Promise<string> {
+export async function refazerCaption(
+  captionAtual: string,
+  feedback: string,
+  options?: GerarCaptionOptions
+): Promise<string> {
   const user = `Legenda atual:\n\n${captionAtual}\n\nPedido do usuário: ${feedback}\n\nNova legenda (só o texto formatado):`;
-  return complete(SYSTEM_REFAZER, user);
+  return complete(SYSTEM_REFAZER, user, options?.provider, options?.model);
 }

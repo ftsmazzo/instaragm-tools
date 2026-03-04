@@ -65,11 +65,18 @@ export const api = {
       body: {},
     }),
   postador: {
-    gerarCaption: (descricao: string, file?: File | null) => {
+    gerarCaption: (
+      descricao: string,
+      file?: File | null,
+      provider?: string | null,
+      model?: string | null
+    ) => {
       if (file) {
         const form = new FormData();
         form.set("descricao", descricao);
         form.set("arquivo", file);
+        if (provider) form.set("provider", provider);
+        if (model) form.set("model", model);
         return fetch(`${base}/api/postador/gerar-caption`, {
           method: "POST",
           body: form,
@@ -80,13 +87,19 @@ export const api = {
       }
       return fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/gerar-caption", {
         method: "POST",
-        body: { descricao },
+        body: { descricao, provider: provider || undefined, model: model || undefined },
       });
     },
-    refazerCaption: (caption_atual: string, feedback: string, refazer_midia?: boolean) =>
+    refazerCaption: (
+      caption_atual: string,
+      feedback: string,
+      refazer_midia?: boolean,
+      provider?: string | null,
+      model?: string | null
+    ) =>
       fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/refazer-caption", {
         method: "POST",
-        body: { caption_atual, feedback, refazer_midia },
+        body: { caption_atual, feedback, refazer_midia, provider: provider || undefined, model: model || undefined },
       }),
     publicar: (caption: string, media_url?: string, media_type?: string) =>
       fetchJson<{ ok: boolean; id_container?: string; message?: string }>("/api/postador/publicar", {
