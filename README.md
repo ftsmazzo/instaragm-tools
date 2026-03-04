@@ -34,7 +34,7 @@ Agente-Instagram/
 ## Postador
 
 - **Painel:** tela Postador com descrição, upload opcional de imagem/vídeo, seletor de IA (OpenAI/Claude e modelo), "Gerar caption", revisão e "Quero alterar" ou "Aprovar e publicar". Lista de **cronograma** (posts já publicados) na mesma tela.
-- **Administração:** em Administração configure o **token de acesso** e o **ID do usuário Instagram** (Graph API) para permitir publicar.
+- **Administração:** em Administração configure o **token de acesso** e o **ID do usuário Instagram** (Graph API) para permitir publicar. Esses dados são gravados em arquivo (`data/config.json`), não em tabela; configure **uma vez** e a API usa em todos os posts. Ver `docs/CONFIG-E-DADOS.md` (persistência e volume no EasyPanel).
 - **API:** `POST /api/postador/gerar-caption` (multipart: descricao + arquivo → MinIO e caption por IA), `POST /api/postador/refazer-caption`, `POST /api/postador/publicar` (Graph API), `GET /api/postador/cronograma`. Config e cronograma persistidos em `data/` (configurar MinIO e variáveis; ver `api/.env.example` e `docs/POSTADOR-BACKEND.md`).
 
 ## Como rodar local
