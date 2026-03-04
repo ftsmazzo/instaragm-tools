@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import { ensureTables } from "./db/index.js";
 import { healthRoutes } from "./routes/health.js";
 import { configRoutes } from "./routes/config.js";
 import { postagensRoutes } from "./routes/postagens.js";
@@ -26,7 +27,17 @@ async function build() {
 }
 
 build()
-  .then((app) => app.listen({ port: PORT, host: HOST }))
+  .then(async (app) => {
+    try {
+      await ensureTables();
+      app.log.info("Tabelas app_config e postador_cronograma verificadas/criadas.");
+    } catch (err) {
+      if (process.env.DATABASE_URL) {
+        app.log.warn({ err }, "Não foi possível criar tabelas no banco (verifique DATABASE_URL). API sobe mesmo assim.");
+      }
+    }
+    return app.listen({ port: PORT, host: HOST });
+  })
   .then((address) => {
     console.log(`API FabriaIA rodando em ${address}`);
   })
