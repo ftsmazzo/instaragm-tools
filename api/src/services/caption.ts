@@ -6,7 +6,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // Fallback só quando o painel não envia provider/model (ex.: chamada direta à API).
 const DEFAULT_PROVIDER = (process.env.POSTADOR_IA_PROVIDER ?? "openai").toLowerCase() as "openai" | "claude";
-const DEFAULT_MODEL_OPENAI = process.env.POSTADOR_IA_MODEL_OPENAI ?? "gpt-4o";
+const DEFAULT_MODEL_OPENAI = process.env.POSTADOR_IA_MODEL_OPENAI ?? "gpt-4.1";
 const DEFAULT_MODEL_CLAUDE = process.env.POSTADOR_IA_MODEL_CLAUDE ?? "claude-sonnet-4-5-20250929";
 
 export type Provider = "openai" | "claude";

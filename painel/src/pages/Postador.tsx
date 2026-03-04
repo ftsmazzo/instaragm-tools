@@ -9,9 +9,8 @@ const PROVIDERS = [
 ] as const;
 
 const MODELS_OPENAI = [
-  { id: "gpt-4o", label: "GPT-4o" },
-  { id: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { id: "gpt-4-turbo", label: "GPT-4 Turbo" },
+  { id: "gpt-4.1", label: "GPT-4.1" },
+  { id: "gpt-5", label: "GPT-5" },
 ];
 
 const MODELS_CLAUDE = [
@@ -30,7 +29,7 @@ function loadSavedIA(): { provider: string; model: string } {
   } catch {
     // ignore
   }
-  return { provider: "openai", model: "gpt-4o" };
+  return { provider: "openai", model: "gpt-4.1" };
 }
 
 function saveIA(provider: string, model: string) {
