@@ -1,15 +1,28 @@
 import sharp from "sharp";
 import { uploadMedia, isStorageConfigured } from "./storage.js";
 
+/** Lado máximo em pixels (Instagram recomenda 1080; 1440 mantém boa qualidade). */
+const INSTAGRAM_MAX_SIDE = 1080;
 const FONT_SIZE = 52;
 const BAR_HEIGHT = 88;
-const MAX_IMAGE_SIDE = 1440;
 const FILL = "#ffffff";
 const BAR_FILL = "rgba(0,0,0,0.65)";
 
 /**
- * Baixa imagem de uma URL e adiciona texto (overlay SVG) na parte inferior,
- * com barra semi-transparente para legibilidade. Faz upload no Cloudinary.
+ * Redimensiona para o formato ideal do Instagram: mantém aspect ratio,
+ * lado maior = INSTAGRAM_MAX_SIDE (sem aumentar se já for menor).
+ */
+function dimensionsForInstagram(width: number, height: number): { w: number; h: number } {
+  const scale = Math.min(INSTAGRAM_MAX_SIDE / width, INSTAGRAM_MAX_SIDE / height, 1);
+  return {
+    w: Math.round(width * scale),
+    h: Math.round(height * scale),
+  };
+}
+
+/**
+ * Baixa imagem, redimensiona para formato ideal Instagram, adiciona texto (overlay) na parte inferior
+ * e faz upload. Base e overlay usam sempre as mesmas dimensões para evitar erro do Sharp.
  */
 async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   if (!isStorageConfigured()) {
@@ -20,8 +33,14 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   const arrayBuffer = await res.arrayBuffer();
   const inputBuffer = Buffer.from(arrayBuffer);
   const meta = await sharp(inputBuffer).metadata();
-  const width = meta.width ?? 1024;
-  const height = meta.height ?? 1024;
+  const origW = meta.width ?? 1024;
+  const origH = meta.height ?? 1024;
+
+  const { w: width, h: height } = dimensionsForInstagram(origW, origH);
+
+  const baseResized = await sharp(inputBuffer)
+    .resize(width, height, { fit: "inside", position: "centre" })
+    .toBuffer();
 
   const safeText = String(text)
     .replace(/&/g, "&amp;")
@@ -42,9 +61,8 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
     .resize(width, height)
     .toBuffer();
 
-  const output = await sharp(inputBuffer)
+  const output = await sharp(baseResized)
     .composite([{ input: rasterized, top: 0, left: 0 }])
-    .resize(MAX_IMAGE_SIDE, MAX_IMAGE_SIDE, { fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 85 })
     .toBuffer();
 
