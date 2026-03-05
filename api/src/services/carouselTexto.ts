@@ -1,28 +1,48 @@
 import sharp from "sharp";
+import { GoogleGenAI, RawReferenceImage } from "@google/genai";
 import { uploadMedia, isStorageConfigured } from "./storage.js";
+import { toInstagramFeedImage } from "./instagramImage.js";
 
-/** Lado máximo em pixels (Instagram recomenda 1080; 1440 mantém boa qualidade). */
 const INSTAGRAM_MAX_SIDE = 1080;
 const FONT_SIZE = 52;
 const BAR_HEIGHT = 88;
 const FILL = "#ffffff";
 const BAR_FILL = "rgba(0,0,0,0.65)";
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GEMINI_API_KEY;
+const USE_GEMINI_FOR_TEXT = (process.env.POSTADOR_CAROUSEL_TEXTO_IA ?? "").toLowerCase() === "gemini";
+const GEMINI_EDIT_MODEL = process.env.POSTADOR_CAROUSEL_TEXTO_IA_MODEL ?? "imagen-3.0-capability-001";
+
 /**
- * Redimensiona para o formato ideal do Instagram: mantém aspect ratio,
- * lado maior = INSTAGRAM_MAX_SIDE (sem aumentar se já for menor).
+ * Tenta adicionar texto na imagem usando Gemini/Imagen editImage (Nano Banana). Retorna null se falhar ou não configurado.
  */
-function dimensionsForInstagram(width: number, height: number): { w: number; h: number } {
-  const scale = Math.min(INSTAGRAM_MAX_SIDE / width, INSTAGRAM_MAX_SIDE / height, 1);
-  return {
-    w: Math.round(width * scale),
-    h: Math.round(height * scale),
-  };
+async function addTextWithGemini(imageBuffer: Buffer, text: string): Promise<Buffer | null> {
+  if (!GEMINI_API_KEY?.trim() || !USE_GEMINI_FOR_TEXT) return null;
+  try {
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY.trim() });
+    const rawRef = new RawReferenceImage();
+    rawRef.referenceImage = {
+      imageBytes: imageBuffer.toString("base64"),
+      mimeType: "image/jpeg",
+    };
+    const prompt = `Add the following text at the bottom of the image, centered, on a semi-transparent dark bar for readability. Keep the rest of the image unchanged. Do not alter the image content. Text to add: "${text.replace(/"/g, '\\"')}"`;
+    const response = await ai.models.editImage({
+      model: GEMINI_EDIT_MODEL,
+      prompt,
+      referenceImages: [rawRef],
+      config: { numberOfImages: 1 },
+    });
+    const out = response?.generatedImages?.[0]?.image?.imageBytes;
+    if (!out) return null;
+    return Buffer.from(out, "base64");
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Baixa imagem, redimensiona para formato ideal Instagram, adiciona texto (overlay) na parte inferior
- * e faz upload. Base e overlay usam sempre as mesmas dimensões para evitar erro do Sharp.
+ * Baixa imagem, redimensiona para formato Instagram (aspect 4:5–1,91:1), adiciona texto na parte inferior
+ * (Gemini/Imagen se configurado, senão Sharp) e faz upload.
  */
 async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   if (!isStorageConfigured()) {
@@ -32,20 +52,17 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   if (!res.ok) throw new Error(`Não foi possível baixar a imagem: ${res.status}`);
   const arrayBuffer = await res.arrayBuffer();
   const inputBuffer = Buffer.from(arrayBuffer);
-  const meta = await sharp(inputBuffer).metadata();
-  const origW = meta.width ?? 1024;
-  const origH = meta.height ?? 1024;
 
-  const target = dimensionsForInstagram(origW, origH);
+  const baseResized = await toInstagramFeedImage(inputBuffer);
 
-  const basePipeline = sharp(inputBuffer).resize(target.w, target.h, {
-    fit: "inside",
-    position: "centre",
-  });
-  const baseResized = await basePipeline.toBuffer();
+  const geminiResult = await addTextWithGemini(baseResized, text);
+  if (geminiResult && geminiResult.length > 0) {
+    return uploadMedia(geminiResult, "image/jpeg", ".jpg");
+  }
+
   const actual = await sharp(baseResized).metadata();
-  const width = actual.width ?? target.w;
-  const height = actual.height ?? target.h;
+  const width = actual.width ?? INSTAGRAM_MAX_SIDE;
+  const height = actual.height ?? INSTAGRAM_MAX_SIDE;
 
   const safeText = String(text)
     .replace(/&/g, "&amp;")
@@ -66,18 +83,17 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
     .resize(width, height)
     .toBuffer();
 
-  const output = await sharp(baseResized)
+  const withOverlay = await sharp(baseResized)
     .composite([{ input: rasterized, top: 0, left: 0 }])
     .jpeg({ quality: 85 })
     .toBuffer();
 
-  return uploadMedia(output, "image/jpeg", ".jpg");
+  return uploadMedia(withOverlay, "image/jpeg", ".jpg");
 }
 
 /**
- * Para cada URL de imagem, adiciona o texto correspondente e faz upload no Cloudinary.
+ * Para cada URL de imagem, adiciona o texto correspondente (Gemini/Imagen se POSTADOR_CAROUSEL_TEXTO_IA=gemini, senão Sharp) e faz upload.
  * Retorna array de novas URLs na mesma ordem.
- * texts[i] é o texto da i-ésima imagem; se texts for menor que imageUrls, as restantes ficam sem texto.
  */
 export async function adicionarTextoCarrossel(
   imageUrls: string[],

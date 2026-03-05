@@ -4,16 +4,14 @@
  */
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import sharp from "sharp";
 import { Readable } from "stream";
 import { isCloudinaryConfigured, uploadBuffer as cloudinaryUpload } from "./cloudinary.js";
 import { isMinioConfigured, uploadStream as minioUpload } from "./minio.js";
+import { toInstagramFeedImage } from "./instagramImage.js";
 
 const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), "data");
 const UPLOADS_DIR = join(DATA_DIR, "uploads");
 const MAX_BYTES_CLOUDINARY = 9.5 * 1024 * 1024; // 9.5 MB (limite free tier 10 MB)
-const MAX_IMAGE_SIDE = 1440; // Instagram recomenda 1080–1440
-const JPEG_QUALITY = 85;
 
 const STORAGE = (process.env.POSTADOR_STORAGE ?? "cloudinary").toLowerCase();
 const MEDIA_BASE_URL = (process.env.POSTADOR_MEDIA_BASE_URL ?? process.env.API_PUBLIC_URL ?? "").trim().replace(/\/$/, "");
@@ -31,22 +29,19 @@ export function isStorageConfigured(): boolean {
 }
 
 /**
- * Comprime imagem (buffer) para caber em ~9 MB: redimensiona e converte para JPEG.
+ * Comprime e ajusta imagem para o feed do Instagram (aspect 4:5 a 1,91:1) e converte para JPEG.
  */
 async function compressImageForCloudinary(
   buffer: Buffer,
   _contentType: string,
   _ext: string
 ): Promise<{ buffer: Buffer; contentType: string; ext: string }> {
-  const out = await sharp(buffer)
-    .resize(MAX_IMAGE_SIDE, MAX_IMAGE_SIDE, { fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: JPEG_QUALITY })
-    .toBuffer();
+  const out = await toInstagramFeedImage(buffer);
   return { buffer: out, contentType: "image/jpeg", ext: ".jpg" };
 }
 
 /**
- * Se for imagem e estiver acima do limite, comprime. Retorna buffer + tipo + ext para upload.
+ * Para imagens no Cloudinary: garante aspect ratio Instagram (4:5 a 1,91:1) e tamanho ≤10MB.
  */
 async function ensureUnderLimit(
   buffer: Buffer,
@@ -54,8 +49,12 @@ async function ensureUnderLimit(
   ext: string
 ): Promise<{ buffer: Buffer; contentType: string; ext: string }> {
   const isImage = contentType.startsWith("image/");
-  if (!isImage || buffer.length <= MAX_BYTES_CLOUDINARY) {
-    return { buffer, contentType, ext };
+  if (!isImage) return { buffer, contentType, ext };
+  if (buffer.length <= MAX_BYTES_CLOUDINARY) {
+    const normalized = await toInstagramFeedImage(buffer);
+    if (normalized.length <= MAX_BYTES_CLOUDINARY) {
+      return { buffer: normalized, contentType: "image/jpeg", ext: ".jpg" };
+    }
   }
   return compressImageForCloudinary(buffer, contentType, ext);
 }
