@@ -9,6 +9,8 @@ RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /app
+# Fontes para o Sharp/librsvg renderizar texto no overlay do carrossel (sem isso só a faixa aparece)
+RUN apk add --no-cache fontconfig ttf-dejavu
 COPY api/package.json ./
 COPY --from=builder /app/dist ./dist
 RUN npm install --omit=dev

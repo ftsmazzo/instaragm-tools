@@ -215,16 +215,17 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // POST /api/postador/carousel-adicionar-texto — overlay de texto em cada imagem do carrossel; retorna novas URLs
+  // POST /api/postador/carousel-adicionar-texto — overlay de texto em cada imagem; use_gemini=true tenta Gemini primeiro
   fastify.post("/carousel-adicionar-texto", async (request, reply) => {
-    const body = request.body as { image_urls?: string[]; texts?: string[] };
+    const body = request.body as { image_urls?: string[]; texts?: string[]; use_gemini?: boolean };
     const imageUrls = Array.isArray(body?.image_urls) ? body.image_urls.filter((u) => typeof u === "string" && u.trim()) : [];
     const texts = Array.isArray(body?.texts) ? body.texts.map((t) => (typeof t === "string" ? t : "")) : [];
+    const useGemini = body?.use_gemini === true;
     if (!imageUrls.length) {
       return reply.status(400).send({ error: "Campo 'image_urls' (array) é obrigatório." });
     }
     try {
-      const newUrls = await adicionarTextoCarrossel(imageUrls, texts);
+      const newUrls = await adicionarTextoCarrossel(imageUrls, texts, useGemini);
       return reply.send({ image_urls: newUrls });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao adicionar texto nas imagens.";

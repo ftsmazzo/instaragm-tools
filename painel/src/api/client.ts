@@ -194,10 +194,10 @@ export const api = {
         method: "POST",
         body: { prompt, provider: provider ?? "openai" },
       }),
-    carouselAdicionarTexto: (image_urls: string[], texts: string[]) =>
+    carouselAdicionarTexto: (image_urls: string[], texts: string[], use_gemini?: boolean) =>
       fetchJson<{ image_urls: string[] }>("/api/postador/carousel-adicionar-texto", {
         method: "POST",
-        body: { image_urls, texts },
+        body: { image_urls, texts, use_gemini: use_gemini === true },
       }),
     uploadMidia: (file: File) => {
       const form = new FormData();

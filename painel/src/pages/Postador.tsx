@@ -51,6 +51,7 @@ export function Postador() {
   const [provedorImagem, setProvedorImagem] = useState<"openai" | "gemini">("gemini");
   const [instrucoesImagem, setInstrucoesImagem] = useState("");
   const [textosCarrossel, setTextosCarrossel] = useState<string[]>([]);
+  const [useGeminiParaTexto, setUseGeminiParaTexto] = useState(false);
   const [caption, setCaption] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
@@ -273,7 +274,7 @@ export function Postador() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.postador.carouselAdicionarTexto(mediaUrls, textosCarrossel);
+      const res = await api.postador.carouselAdicionarTexto(mediaUrls, textosCarrossel, useGeminiParaTexto);
       const urls = res.image_urls ?? [];
       setMediaUrls(urls);
       setPreviewUrls(urls);
@@ -518,6 +519,16 @@ export function Postador() {
                 <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                   <p className="text-sm font-medium text-gray-700 mb-2">Texto em cada imagem (opcional)</p>
                   <p className="text-xs text-gray-500 mb-2">Digite o texto que será sobreposto em cada slide. Deixe em branco para não alterar.</p>
+                  <label className="flex items-center gap-2 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={useGeminiParaTexto}
+                      onChange={(e) => setUseGeminiParaTexto(e.target.checked)}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">Usar IA (Gemini) para inserir o texto</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">Se marcar, a API usará Gemini/Imagen para desenhar o texto na imagem (requer GEMINI_API_KEY). Caso contrário, usa overlay no servidor.</p>
                   <div className="space-y-2 mb-2">
                     {previewUrls.map((_, i) => (
                       <div key={i} className="flex items-center gap-2">

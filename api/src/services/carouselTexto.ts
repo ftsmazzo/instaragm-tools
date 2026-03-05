@@ -15,11 +15,16 @@ const GEMINI_EDIT_MODEL = process.env.POSTADOR_CAROUSEL_TEXTO_IA_MODEL ?? "image
 
 /**
  * Tenta adicionar texto na imagem usando Gemini/Imagen editImage (Nano Banana). Retorna null se falhar ou não configurado.
+ * useGemini: true = tentar sempre (se key existir); false = não tentar; undefined = usar env POSTADOR_CAROUSEL_TEXTO_IA.
  */
-async function addTextWithGemini(imageBuffer: Buffer, text: string): Promise<Buffer | null> {
-  if (!GEMINI_API_KEY?.trim() || !USE_GEMINI_FOR_TEXT) return null;
+async function addTextWithGemini(imageBuffer: Buffer, text: string, useGemini?: boolean): Promise<Buffer | null> {
+  const hasKey = Boolean(GEMINI_API_KEY && String(GEMINI_API_KEY).trim());
+  const tryGemini = hasKey && (useGemini === true || (useGemini !== false && USE_GEMINI_FOR_TEXT));
+  if (!tryGemini) return null;
+  const apiKey = String(GEMINI_API_KEY ?? "").trim();
+  if (!apiKey) return null;
   try {
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY.trim() });
+    const ai = new GoogleGenAI({ apiKey });
     const rawRef = new RawReferenceImage();
     rawRef.referenceImage = {
       imageBytes: imageBuffer.toString("base64"),
@@ -42,9 +47,9 @@ async function addTextWithGemini(imageBuffer: Buffer, text: string): Promise<Buf
 
 /**
  * Baixa imagem, redimensiona para formato Instagram (aspect 4:5–1,91:1), adiciona texto na parte inferior
- * (Gemini/Imagen se configurado, senão Sharp) e faz upload.
+ * (Gemini/Imagen se useGemini ou env, senão Sharp) e faz upload.
  */
-async function addTextToImage(imageUrl: string, text: string): Promise<string> {
+async function addTextToImage(imageUrl: string, text: string, useGemini?: boolean): Promise<string> {
   if (!isStorageConfigured()) {
     throw new Error("Configure um armazenamento (Cloudinary, local ou MinIO) para salvar as imagens com texto.");
   }
@@ -55,7 +60,7 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
 
   const baseResized = await toInstagramFeedImage(inputBuffer);
 
-  const geminiResult = await addTextWithGemini(baseResized, text);
+  const geminiResult = await addTextWithGemini(baseResized, text, useGemini);
   if (geminiResult && geminiResult.length > 0) {
     return uploadMedia(geminiResult, "image/jpeg", ".jpg");
   }
@@ -73,9 +78,10 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   const textY = height - BAR_HEIGHT / 2 + FONT_SIZE / 3;
   const textX = width / 2;
 
+  // DejaVu Sans existe no Alpine (ttf-dejavu); fontes entre aspas para o librsvg interpretar
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="${barTop}" width="${width}" height="${BAR_HEIGHT}" fill="${BAR_FILL}"/>
-  <text x="${textX}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="${FONT_SIZE}" font-weight="bold" fill="${FILL}">${safeText}</text>
+  <text x="${textX}" y="${textY}" text-anchor="middle" dominant-baseline="central" style="font-family:'DejaVu Sans',sans-serif;font-size:${FONT_SIZE}px;font-weight:bold;fill:${FILL}">${safeText}</text>
 </svg>`;
 
   const overlayBuffer = Buffer.from(svg);
@@ -92,12 +98,13 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
 }
 
 /**
- * Para cada URL de imagem, adiciona o texto correspondente (Gemini/Imagen se POSTADOR_CAROUSEL_TEXTO_IA=gemini, senão Sharp) e faz upload.
+ * Para cada URL de imagem, adiciona o texto correspondente. useGemini=true tenta Gemini/Imagen primeiro (precisa GEMINI_API_KEY).
  * Retorna array de novas URLs na mesma ordem.
  */
 export async function adicionarTextoCarrossel(
   imageUrls: string[],
-  texts: string[]
+  texts: string[],
+  useGemini?: boolean
 ): Promise<string[]> {
   const results: string[] = [];
   for (let i = 0; i < imageUrls.length; i++) {
@@ -107,7 +114,7 @@ export async function adicionarTextoCarrossel(
       results.push(url);
       continue;
     }
-    const newUrl = await addTextToImage(url, text);
+    const newUrl = await addTextToImage(url, text, useGemini);
     results.push(newUrl);
   }
   return results;
