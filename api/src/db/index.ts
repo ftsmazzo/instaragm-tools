@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS postador_cronograma (
   data_post text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS postador_agendados (
+  id text PRIMARY KEY,
+  caption text NOT NULL,
+  media_url text,
+  media_urls jsonb,
+  media_type text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 `;
 
 let initDone = false;

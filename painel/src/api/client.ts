@@ -34,10 +34,19 @@ export type CronogramaItem = {
   id: string;
   caption: string;
   media_url: string | null;
-  media_type: "IMAGE" | "REELS" | null;
+  media_type: "IMAGE" | "REELS" | "CAROUSEL" | null;
   id_container: string | null;
   link_post: string | null;
   data_post: string;
+  created_at: string;
+};
+
+export type AgendadoItem = {
+  id: string;
+  caption: string;
+  media_url: string | null;
+  media_urls: string[] | null;
+  media_type: "IMAGE" | "REELS" | "CAROUSEL";
   created_at: string;
 };
 
@@ -82,14 +91,15 @@ export const api = {
   postador: {
     gerarCaption: (
       descricao: string,
-      file?: File | null,
+      file?: File | File[] | null,
       provider?: string | null,
       model?: string | null
     ) => {
-      if (file) {
+      const files = file == null ? [] : Array.isArray(file) ? file : [file];
+      if (files.length > 0) {
         const form = new FormData();
         form.set("descricao", descricao);
-        form.set("arquivo", file);
+        for (const f of files) form.append("arquivo", f);
         if (provider) form.set("provider", provider);
         if (model) form.set("model", model);
         return fetch(`${base}/api/postador/gerar-caption`, {
@@ -101,10 +111,10 @@ export const api = {
             const msg = (errBody as { error?: string }).error ?? `API ${res.status}: ${res.statusText}`;
             throw new Error(msg);
           }
-          return res.json() as Promise<{ caption: string; media_url?: string; media_type?: string }>;
+          return res.json() as Promise<{ caption: string; media_url?: string; media_urls?: string[]; media_type?: string }>;
         });
       }
-      return fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/gerar-caption", {
+      return fetchJson<{ caption: string; media_url?: string; media_urls?: string[]; media_type?: string }>("/api/postador/gerar-caption", {
         method: "POST",
         body: { descricao, provider: provider || undefined, model: model || undefined },
       });
@@ -125,12 +135,53 @@ export const api = {
         method: "POST",
         body: { caption_atual, feedback, refazer_midia, provider: provider || undefined, model: model || undefined },
       }),
-    publicar: (caption: string, media_url?: string, media_type?: string) =>
+    publicar: (payload: {
+      caption: string;
+      media_url?: string;
+      media_urls?: string[];
+      media_type?: "IMAGE" | "REELS";
+    }) =>
       fetchJson<{ ok: boolean; id_container?: string; id_media?: string; link_post?: string; message?: string }>("/api/postador/publicar", {
         method: "POST",
-        body: { caption, media_url, media_type },
+        body: payload,
       }),
     getCronograma: () =>
       fetchJson<{ cronograma: CronogramaItem[]; total: number }>("/api/postador/cronograma"),
+    getAgendados: () =>
+      fetchJson<{ agendados: AgendadoItem[]; total: number }>("/api/postador/agendados"),
+    saveAgendado: (payload: {
+      caption: string;
+      media_url?: string | null;
+      media_urls?: string[] | null;
+      media_type: "IMAGE" | "REELS" | "CAROUSEL";
+    }) =>
+      fetchJson<{ ok: boolean; agendado: AgendadoItem }>("/api/postador/agendados", {
+        method: "POST",
+        body: payload,
+      }),
+    deleteAgendado: (id: string) =>
+      fetchJson<{ ok: boolean }>(`/api/postador/agendados/${id}`, { method: "DELETE" }),
+    publicarAgendado: (id: string) =>
+      fetchJson<{ ok: boolean; id_container?: string; id_media?: string; link_post?: string; message?: string }>(
+        `/api/postador/agendados/${id}/publicar`,
+        { method: "POST" }
+      ),
+    gerarImagem: (prompt: string) =>
+      fetchJson<{ media_url: string }>("/api/postador/gerar-imagem", {
+        method: "POST",
+        body: { prompt },
+      }),
+    uploadMidia: (file: File) => {
+      const form = new FormData();
+      form.set("arquivo", file);
+      return fetch(`${base}/api/postador/upload-midia`, { method: "POST", body: form }).then(async (res) => {
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          const msg = (errBody as { error?: string }).error ?? `API ${res.status}: ${res.statusText}`;
+          throw new Error(msg);
+        }
+        return res.json() as Promise<{ media_url: string }>;
+      });
+    },
   },
 };

@@ -9,7 +9,7 @@ export type CronogramaItem = {
   id: string;
   caption: string;
   media_url: string | null;
-  media_type: "IMAGE" | "REELS" | null;
+  media_type: "IMAGE" | "REELS" | "CAROUSEL" | null;
   id_container: string | null;
   link_post: string | null;
   data_post: string;
@@ -41,7 +41,7 @@ async function listFromDb(): Promise<CronogramaItem[]> {
     id: r.id,
     caption: r.caption,
     media_url: r.media_url ?? null,
-    media_type: r.media_type as "IMAGE" | "REELS" | null,
+    media_type: r.media_type as "IMAGE" | "REELS" | "CAROUSEL" | null,
     id_container: r.id_container ?? null,
     link_post: r.link_post ?? null,
     data_post: r.data_post,

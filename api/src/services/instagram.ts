@@ -101,3 +101,98 @@ export async function publishToInstagram(
     link_post: linkPost,
   };
 }
+
+async function waitContainerReady(creationId: string, token: string, maxWaitMs = 30000): Promise<void> {
+  const step = 1500;
+  let elapsed = 0;
+  while (elapsed < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, step));
+    elapsed += step;
+    const statusRes = await fetch(
+      `${GRAPH_API_BASE}/${creationId}?fields=status_code,status&access_token=${token}`
+    );
+    const statusJson = (await statusRes.json()) as { status_code?: string; status?: string; error?: { message?: string } };
+    if (statusJson.status_code === "FINISHED") return;
+    if (statusJson.status_code === "ERROR" || statusJson.status === "ERROR") {
+      const detail = statusJson.error?.message ?? "URL inacessível ou formato inválido.";
+      throw new Error(`Processamento do item falhou no Instagram: ${detail}`);
+    }
+    if (elapsed >= 6000 && statusJson.status_code === undefined) return; // imagem pode não devolver status
+  }
+  throw new Error("Timeout aguardando container no Instagram.");
+}
+
+/**
+ * Publica um carrossel (várias imagens) no Instagram.
+ * Cria um container por imagem com is_carousel_item=true, depois o container pai CAROUSEL.
+ */
+export async function publishCarouselToInstagram(
+  caption: string,
+  mediaUrls: string[],
+  accessToken: string,
+  igUserId: string
+): Promise<PublishResult> {
+  const token = accessToken.trim();
+  const igId = igUserId.trim();
+  if (!token || !igId) {
+    throw new Error("Credenciais do Instagram incompletas. Configure em Administração: token e ID do usuário Instagram.");
+  }
+  if (!mediaUrls.length || mediaUrls.length > 10) {
+    throw new Error("Carrossel deve ter entre 1 e 10 imagens.");
+  }
+
+  const childIds: string[] = [];
+  for (const imageUrl of mediaUrls) {
+    const createUrl = `${GRAPH_API_BASE}/${igId}/media?image_url=${encodeURIComponent(imageUrl)}&is_carousel_item=true&access_token=${token}`;
+    const createRes = await fetch(createUrl, { method: "POST" });
+    const createJson = (await createRes.json()) as { id?: string; error?: { message: string } };
+    if (createJson.error) {
+      throw new Error(createJson.error.message || "Erro ao criar item do carrossel no Instagram");
+    }
+    const id = createJson.id;
+    if (!id) throw new Error("Instagram não retornou ID do item do carrossel");
+    childIds.push(id);
+  }
+
+  for (const childId of childIds) {
+    await waitContainerReady(childId, token);
+  }
+
+  const childrenParam = childIds.join(",");
+  const parentUrl = `${GRAPH_API_BASE}/${igId}/media?media_type=CAROUSEL&children=${encodeURIComponent(childrenParam)}&caption=${encodeURIComponent(caption)}&access_token=${token}`;
+  const parentRes = await fetch(parentUrl, { method: "POST" });
+  const parentJson = (await parentRes.json()) as { id?: string; error?: { message: string } };
+  if (parentJson.error) {
+    throw new Error(parentJson.error.message || "Erro ao criar carrossel no Instagram");
+  }
+  const parentId = parentJson.id;
+  if (!parentId) throw new Error("Instagram não retornou ID do carrossel");
+
+  await waitContainerReady(parentId, token, 60000);
+
+  const publishRes = await fetch(
+    `${GRAPH_API_BASE}/${igId}/media_publish?creation_id=${parentId}&access_token=${token}`,
+    { method: "POST" }
+  );
+  const publishJson = (await publishRes.json()) as { id?: string; error?: { message: string } };
+  if (publishJson.error) {
+    throw new Error(publishJson.error.message || "Erro ao publicar carrossel no Instagram");
+  }
+  const idMedia = publishJson.id;
+  if (!idMedia) throw new Error("Instagram não retornou ID da mídia publicada");
+
+  let linkPost: string | null = null;
+  try {
+    const permRes = await fetch(`${GRAPH_API_BASE}/${idMedia}?fields=permalink&access_token=${token}`);
+    const permJson = (await permRes.json()) as { permalink?: string };
+    linkPost = permJson.permalink ?? null;
+  } catch {
+    // ignora
+  }
+
+  return {
+    id_container: parentId,
+    id_media: idMedia,
+    link_post: linkPost,
+  };
+}

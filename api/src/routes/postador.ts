@@ -4,9 +4,11 @@ import { gerarCaption as gerarCaptionIA, refazerCaption as refazerCaptionIA } fr
 import { isCloudinaryConfigured, uploadBuffer } from "../services/cloudinary.js";
 import { isMinioConfigured, uploadStream } from "../services/minio.js";
 import { rasparPaginaImovel, montarDescricaoParaCaption, baixarEEnviarParaCloudinary } from "../services/imovel.js";
-import { publishToInstagram } from "../services/instagram.js";
+import { publishToInstagram, publishCarouselToInstagram } from "../services/instagram.js";
+import { gerarImagemComIA } from "../services/imageGen.js";
 import { loadConfig } from "../store/config.js";
 import { appendCronograma, listCronograma } from "../store/cronograma.js";
+import { listAgendados, addAgendado, getAgendado, deleteAgendado } from "../store/agendados.js";
 
 function extFromMimetype(mimetype: string): string {
   const map: Record<string, string> = {
@@ -28,6 +30,164 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/cronograma", async (_request, reply) => {
     const list = await listCronograma();
     return reply.send({ cronograma: list, total: list.length });
+  });
+
+  // GET /api/postador/agendados — lista de posts salvos para agendar
+  fastify.get("/agendados", async (_request, reply) => {
+    const list = await listAgendados();
+    return reply.send({ agendados: list, total: list.length });
+  });
+
+  // POST /api/postador/agendados — salvar post para agendar (caption, media_url ou media_urls, media_type)
+  fastify.post("/agendados", async (request, reply) => {
+    const body = request.body as {
+      caption?: string;
+      media_url?: string;
+      media_urls?: string[];
+      media_type?: string;
+    };
+    const caption = (body?.caption ?? "").trim();
+    const media_url = body?.media_url?.trim() || null;
+    const media_urls = Array.isArray(body?.media_urls) ? body.media_urls.filter((u) => typeof u === "string" && u.trim()) : null;
+    const media_type = body?.media_type === "REELS" ? "REELS" : body?.media_type === "CAROUSEL" ? "CAROUSEL" : "IMAGE";
+
+    if (!caption) {
+      return reply.status(400).send({ error: "Campo 'caption' é obrigatório para salvar o agendado." });
+    }
+    if (media_type === "CAROUSEL") {
+      if (!media_urls?.length || media_urls.length > 10) {
+        return reply.status(400).send({ error: "Carrossel precisa de 1 a 10 URLs de imagem em 'media_urls'." });
+      }
+    } else if (!media_url) {
+      return reply.status(400).send({ error: "Informe 'media_url' (imagem ou vídeo) para salvar o agendado." });
+    }
+
+    try {
+      const item = await addAgendado({
+        caption,
+        media_url: media_type === "CAROUSEL" ? null : media_url,
+        media_urls: media_type === "CAROUSEL" ? media_urls : null,
+        media_type,
+      });
+      return reply.send({ ok: true, agendado: item });
+    } catch (err) {
+      fastify.log.error({ err }, "agendados POST");
+      return reply.status(500).send({ error: "Erro ao salvar agendado." });
+    }
+  });
+
+  // DELETE /api/postador/agendados/:id
+  fastify.delete<{ Params: { id: string } }>("/agendados/:id", async (request, reply) => {
+    const { id } = request.params;
+    const ok = await deleteAgendado(id);
+    if (!ok) return reply.status(404).send({ error: "Agendado não encontrado." });
+    return reply.send({ ok: true });
+  });
+
+  // POST /api/postador/agendados/:id/publicar — publicar um agendado agora
+  fastify.post<{ Params: { id: string } }>("/agendados/:id/publicar", async (request, reply) => {
+    const { id } = request.params;
+    const agendado = await getAgendado(id);
+    if (!agendado) {
+      return reply.status(404).send({ error: "Agendado não encontrado." });
+    }
+
+    const config = await loadConfig();
+    const token = config.instagram?.access_token?.trim();
+    const igUserId = config.instagram?.ig_user_id?.trim();
+    if (!token || !igUserId) {
+      return reply.status(400).send({
+        error: "Configure as credenciais do Instagram em Administração.",
+      });
+    }
+
+    try {
+      if (agendado.media_type === "CAROUSEL" && agendado.media_urls?.length) {
+        const result = await publishCarouselToInstagram(agendado.caption, agendado.media_urls, token, igUserId);
+        const dataPost = new Date().toISOString();
+        await appendCronograma({
+          caption: agendado.caption,
+          media_url: null,
+          media_type: "CAROUSEL",
+          id_container: result.id_container,
+          link_post: result.link_post,
+          data_post: dataPost,
+        });
+        await deleteAgendado(id);
+        return reply.send({ ok: true, id_container: result.id_container, id_media: result.id_media, link_post: result.link_post, message: "Carrossel publicado." });
+      }
+      const mediaUrl = agendado.media_url;
+      if (!mediaUrl) {
+        return reply.status(400).send({ error: "Agendado sem mídia." });
+      }
+      const result = await publishToInstagram(agendado.caption, mediaUrl, agendado.media_type === "REELS" ? "REELS" : "IMAGE", token, igUserId);
+      const dataPost = new Date().toISOString();
+      await appendCronograma({
+        caption: agendado.caption,
+        media_url: mediaUrl,
+        media_type: agendado.media_type,
+        id_container: result.id_container,
+        link_post: result.link_post,
+        data_post: dataPost,
+      });
+      await deleteAgendado(id);
+      return reply.send({ ok: true, id_container: result.id_container, id_media: result.id_media, link_post: result.link_post, message: "Post publicado." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao publicar.";
+      fastify.log.error({ err }, "agendados publicar");
+      return reply.status(500).send({ error: msg });
+    }
+  });
+
+  // POST /api/postador/upload-midia — multipart: um arquivo de imagem/vídeo; retorna { media_url } (Cloudinary ou MinIO)
+  fastify.post("/upload-midia", async (request, reply) => {
+    const contentType = request.headers["content-type"] ?? "";
+    if (!contentType.includes("multipart/form-data")) {
+      return reply.status(400).send({ error: "Envie um arquivo via multipart/form-data." });
+    }
+    let mediaUrl: string | undefined;
+    const parts = request.parts();
+    for await (const part of parts) {
+      if (part.type === "file") {
+        const mimetype = part.mimetype ?? "application/octet-stream";
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const buffer = Buffer.concat(chunks);
+        const ext = extFromMimetype(mimetype);
+        if (isCloudinaryConfigured()) {
+          mediaUrl = await uploadBuffer(buffer, mimetype, ext);
+        } else if (isMinioConfigured()) {
+          mediaUrl = await uploadStream(Readable.from(buffer), mimetype, ext);
+        }
+        break;
+      }
+    }
+    if (!mediaUrl) {
+      return reply.status(400).send({ error: "Nenhum arquivo enviado ou armazenamento não configurado." });
+    }
+    return reply.send({ media_url: mediaUrl });
+  });
+
+  // POST /api/postador/gerar-imagem — gera imagem com DALL-E e retorna URL (Cloudinary)
+  fastify.post("/gerar-imagem", async (request, reply) => {
+    const body = request.body as { prompt?: string };
+    const prompt = (body?.prompt ?? "").trim();
+    if (!prompt) {
+      return reply.status(400).send({ error: "Campo 'prompt' é obrigatório (descrição da imagem desejada)." });
+    }
+    try {
+      const media_url = await gerarImagemComIA(prompt);
+      return reply.send({ media_url });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar imagem.";
+      if (msg.includes("OPENAI_API_KEY") || msg.includes("Cloudinary")) {
+        return reply.status(503).send({ error: msg });
+      }
+      fastify.log.error({ err }, "gerar-imagem");
+      return reply.status(500).send({ error: msg });
+    }
   });
 
   // POST /api/postador/por-url — JSON { url, provider?, model? }. Raspa página do imóvel, baixa imagem → Cloudinary, gera caption.
@@ -80,14 +240,17 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // POST /api/postador/gerar-caption — JSON { descricao, provider?, model? } OU multipart (descricao + arquivo + provider + model)
+  // POST /api/postador/gerar-caption — JSON { descricao, provider?, model? } OU multipart (descricao + arquivo(s) + provider + model)
+  // Vários arquivos de imagem → carrossel (media_urls, media_type CAROUSEL). Um vídeo → REELS. Uma imagem → IMAGE.
   fastify.post("/gerar-caption", async (request, reply) => {
     const contentType = request.headers["content-type"] ?? "";
     let descricao = "";
-    let mediaType: "IMAGE" | "REELS" | undefined;
+    let mediaType: "IMAGE" | "REELS" | "CAROUSEL" | undefined;
     let mediaUrl: string | undefined;
+    let mediaUrls: string[] | undefined;
     let provider: string | undefined;
     let model: string | undefined;
+    const uploadedUrls: string[] = [];
 
     if (contentType.includes("multipart/form-data")) {
       const parts = request.parts();
@@ -100,20 +263,44 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
         }
         if (part.type === "file") {
           const mimetype = part.mimetype ?? "application/octet-stream";
-          if (mimetype.startsWith("video/")) mediaType = "REELS";
-          else if (mimetype.startsWith("image/")) mediaType = "IMAGE";
           const chunks: Buffer[] = [];
           for await (const chunk of part.file) {
             chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           }
           const buffer = Buffer.concat(chunks);
           const ext = extFromMimetype(mimetype);
-          if (isCloudinaryConfigured()) {
-            mediaUrl = await uploadBuffer(buffer, mimetype, ext);
-          } else if (isMinioConfigured()) {
-            mediaUrl = await uploadStream(Readable.from(buffer), mimetype, ext);
+          if (mimetype.startsWith("video/")) {
+            if (uploadedUrls.length > 0) {
+              return reply.status(400).send({ error: "Não misture vídeo com várias imagens. Envie um vídeo ou apenas imagens para carrossel." });
+            }
+            mediaType = "REELS";
+            if (isCloudinaryConfigured()) {
+              mediaUrl = await uploadBuffer(buffer, mimetype, ext);
+            } else if (isMinioConfigured()) {
+              mediaUrl = await uploadStream(Readable.from(buffer), mimetype, ext);
+            }
+            break;
+          }
+          if (mimetype.startsWith("image/")) {
+            if (mediaType === "REELS") {
+              return reply.status(400).send({ error: "Não misture vídeo com imagens." });
+            }
+            if (isCloudinaryConfigured()) {
+              const url = await uploadBuffer(buffer, mimetype, ext);
+              uploadedUrls.push(url);
+            } else if (isMinioConfigured()) {
+              const url = await uploadStream(Readable.from(buffer), mimetype, ext);
+              uploadedUrls.push(url);
+            }
           }
         }
+      }
+      if (uploadedUrls.length > 1) {
+        mediaType = "CAROUSEL";
+        mediaUrls = uploadedUrls;
+      } else if (uploadedUrls.length === 1) {
+        mediaType = "IMAGE";
+        mediaUrl = uploadedUrls[0];
       }
     } else {
       const body = request.body as { descricao?: string; provider?: string; model?: string };
@@ -128,15 +315,17 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
 
     const providerNorm = provider === "claude" ? "claude" : undefined;
     try {
-      const caption = await gerarCaptionIA(descricao, mediaType, {
+      const caption = await gerarCaptionIA(descricao, mediaType === "CAROUSEL" ? "IMAGE" : mediaType, {
         provider: providerNorm ?? (provider === "openai" ? "openai" : undefined),
         model: model || undefined,
       });
-      return reply.send({
+      const payload: { caption: string; media_url?: string; media_urls?: string[]; media_type?: string } = {
         caption,
-        media_url: mediaUrl ?? undefined,
         media_type: mediaType,
-      });
+      };
+      if (mediaUrls?.length) payload.media_urls = mediaUrls;
+      else if (mediaUrl) payload.media_url = mediaUrl;
+      return reply.send(payload);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao gerar caption";
       if (msg.includes("OPENAI_API_KEY") || msg.includes("ANTHROPIC_API_KEY")) {
@@ -190,18 +379,25 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // POST /api/postador/publicar — JSON: { caption, media_url, media_type? }
+  // POST /api/postador/publicar — JSON: { caption, media_url?, media_urls?, media_type? }
+  // Se media_urls (array com 2+ itens): publica carrossel. Senão: media_url + media_type (IMAGE ou REELS).
   fastify.post("/publicar", async (request, reply) => {
-    const body = request.body as { caption?: string; media_url?: string; media_type?: string };
-    const caption = body?.caption ?? "";
+    const body = request.body as { caption?: string; media_url?: string; media_urls?: string[]; media_type?: string };
+    const caption = (body?.caption ?? "").trim();
     const mediaUrl = body?.media_url?.trim();
+    const mediaUrls = Array.isArray(body?.media_urls) ? body.media_urls.filter((u) => typeof u === "string" && u.trim()) : [];
     const mediaType = (body?.media_type === "REELS" ? "REELS" : "IMAGE") as "IMAGE" | "REELS";
+    const isCarousel = mediaUrls.length > 1;
 
-    if (!caption.trim()) {
+    if (!caption) {
       fastify.log.info({ reason: "caption_empty" }, "publicar 400");
       return reply.status(400).send({ error: "Campo 'caption' é obrigatório para publicar" });
     }
-    if (!mediaUrl) {
+    if (isCarousel) {
+      if (mediaUrls.length > 10) {
+        return reply.status(400).send({ error: "Carrossel pode ter no máximo 10 imagens." });
+      }
+    } else if (!mediaUrl) {
       fastify.log.info({ reason: "media_url_missing" }, "publicar 400");
       return reply.status(400).send({
         error: "Para publicar no feed é necessário uma imagem ou vídeo. Envie um arquivo ao gerar o caption.",
@@ -219,11 +415,30 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     try {
-      const result = await publishToInstagram(caption, mediaUrl, mediaType, token, igUserId);
+      if (isCarousel) {
+        const result = await publishCarouselToInstagram(caption, mediaUrls, token, igUserId);
+        const dataPost = new Date().toISOString();
+        await appendCronograma({
+          caption,
+          media_url: null,
+          media_type: "CAROUSEL",
+          id_container: result.id_container,
+          link_post: result.link_post,
+          data_post: dataPost,
+        });
+        return reply.send({
+          ok: true,
+          id_container: result.id_container,
+          id_media: result.id_media,
+          link_post: result.link_post,
+          message: "Carrossel publicado no Instagram.",
+        });
+      }
+      const result = await publishToInstagram(caption, mediaUrl!, mediaType, token, igUserId);
       const dataPost = new Date().toISOString();
       await appendCronograma({
         caption,
-        media_url: mediaUrl,
+        media_url: mediaUrl!,
         media_type: mediaType,
         id_container: result.id_container,
         link_post: result.link_post,

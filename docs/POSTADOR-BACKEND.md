@@ -188,8 +188,15 @@ Nada disso exige o n8n; o fluxo do Postador fica inteiro no nosso sistema.
 - **Cloudinary** (prioridade se configurado): upload em `gerar-caption` com URLs públicas estáveis (como no workflow n8n). Variáveis: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET` (ex.: n8nimage). Não expira.
 - **MinIO** (fallback): upload de mídia; URL pública. Variáveis: `MINIO_INTERNAL_URL`, `MINIO_PUBLIC_URL`, etc. Se o bucket for privado ou a URL expirar, use Cloudinary.
 - **Instagram Graph API**: criação de container (imagem ou Reels) e publicação; Reels aguardam processamento antes de `media_publish`. Credenciais vêm da config (Administração).
-- **Cronograma**: cada post publicado é gravado em `data/cronograma.json` (caption, media_url, link_post, data_post, etc.); listado no painel na tela Postador.
+- **Cronograma**: cada post publicado é gravado em `data/cronograma.json` ou tabela `postador_cronograma` (PostgreSQL); listado no painel na tela Postador.
 - **Painel**: Administração com **Token de acesso** e **ID do usuário Instagram**; Postador com seletor de IA, upload de arquivo, aprovação, publicação e lista de cronograma.
+
+### Recursos adicionais (agendados, mídia por IA, carrossel)
+
+- **Salvar para agendar**: o painel pode salvar um rascunho (caption + mídia) na tabela `postador_agendados` (ou arquivo `data/agendados.json`) sem publicar. Endpoints: `GET /api/postador/agendados`, `POST /api/postador/agendados`, `DELETE /api/postador/agendados/:id`, `POST /api/postador/agendados/:id/publicar` (publica o agendado e remove da lista).
+- **Criar mídia com IA**: opção no formulário “Criar mídia com IA” usa **DALL·E 3** para gerar a imagem a partir de instruções (ou da descrição). Endpoint `POST /api/postador/gerar-imagem` (body: `{ prompt }`) retorna `{ media_url }` (upload no Cloudinary). Requer `OPENAI_API_KEY` e Cloudinary configurado.
+- **Post por URL do imóvel**: na revisão, se a mídia veio do link, o usuário pode **excluir a imagem**, **gerar nova imagem com IA** (campo de prompt + botão) ou **incluir imagem** (upload). Upload de uma mídia avulsa: `POST /api/postador/upload-midia` (multipart, um arquivo) → retorna `{ media_url }`.
+- **Carrossel**: envio de **várias imagens** no mesmo formulário (multipart com vários `arquivo`) gera um post tipo **CAROUSEL** no Instagram. O backend cria um container por imagem (`is_carousel_item=true`), depois o container pai `media_type=CAROUSEL` com `children=...`, aguarda processamento e chama `media_publish`. Publicação aceita `media_urls` (array) em `POST /api/postador/publicar` para carrossel; agendados suportam `media_type: "CAROUSEL"` e `media_urls`.
 
 ---
 

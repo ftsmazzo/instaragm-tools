@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { api } from "../api/client";
+import { useState, useEffect, useRef } from "react";
+import { api, type AgendadoItem } from "../api/client";
 
 const STORAGE_KEY = "postador_ia";
 
@@ -46,23 +46,30 @@ type Step = "form" | "review" | "published";
 export function Postador() {
   const [descricao, setDescricao] = useState("");
   const [urlImovel, setUrlImovel] = useState("");
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [criarMidiaIA, setCriarMidiaIA] = useState(false);
+  const [instrucoesImagem, setInstrucoesImagem] = useState("");
   const [caption, setCaption] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<"IMAGE" | "REELS" | undefined>(undefined);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [mediaType, setMediaType] = useState<"IMAGE" | "REELS" | "CAROUSEL" | undefined>(undefined);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [fromUrl, setFromUrl] = useState(false);
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
-  const [publishedId, setPublishedId] = useState<string | null>(null);
   const [linkPost, setLinkPost] = useState<string | null>(null);
+  const [agendadoSuccess, setAgendadoSuccess] = useState<string | null>(null);
+  const [promptImagemIA, setPromptImagemIA] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [provider, setProvider] = useState(loadSavedIA().provider);
   const [model, setModel] = useState(loadSavedIA().model);
 
   const modelsList = provider === "claude" ? MODELS_CLAUDE : MODELS_OPENAI;
   const currentModelInList = modelsList.some((m) => m.id === model);
+  const effectiveModel = currentModelInList ? model : modelsList[0]?.id ?? model;
 
   useEffect(() => {
     saveIA(provider, model);
@@ -78,24 +85,37 @@ export function Postador() {
       return;
     }
     setError(null);
+    setFromUrl(false);
     setLoading(true);
     try {
+      let urlGerada: string | null = null;
+      if (criarMidiaIA) {
+        const prompt = (instrucoesImagem || descricao).trim();
+        const resImg = await api.postador.gerarImagem(prompt);
+        urlGerada = resImg.media_url;
+      }
+      const files = arquivos.length ? arquivos : undefined;
       const res = await api.postador.gerarCaption(
         descricao.trim(),
-        arquivo ?? undefined,
+        files,
         provider,
-        currentModelInList ? model : modelsList[0]?.id ?? model
+        effectiveModel
       );
       setCaption(res.caption);
-      setMediaUrl(res.media_url ?? null);
-      setMediaType(res.media_type === "REELS" ? "REELS" : res.media_type === "IMAGE" ? "IMAGE" : undefined);
-      if (arquivo && arquivo.type.startsWith("image/")) {
-        const url = URL.createObjectURL(arquivo);
-        setPreviewUrl(url);
-      } else if (res.media_url && res.media_type === "IMAGE") {
-        setPreviewUrl(res.media_url);
+      setMediaUrl(res.media_url ?? urlGerada ?? null);
+      setMediaUrls(res.media_urls ?? (urlGerada ? [urlGerada] : []));
+      const tipo = res.media_type === "REELS" ? "REELS" : res.media_type === "CAROUSEL" ? "CAROUSEL" : "IMAGE";
+      setMediaType(tipo);
+      if (tipo === "CAROUSEL" && res.media_urls?.length) {
+        setPreviewUrls(res.media_urls);
+      } else if (res.media_url) {
+        setPreviewUrls([res.media_url]);
+      } else if (urlGerada) {
+        setPreviewUrls([urlGerada]);
+      } else if (arquivos.length === 1 && arquivos[0].type.startsWith("image/")) {
+        setPreviewUrls([URL.createObjectURL(arquivos[0])]);
       } else {
-        setPreviewUrl(null);
+        setPreviewUrls([]);
       }
       setStep("review");
     } catch (e) {
@@ -112,17 +132,9 @@ export function Postador() {
     }
     setError(null);
     setLoading(true);
-    const effectiveModel = currentModelInList ? model : modelsList[0]?.id ?? model;
     try {
-      const res = await api.postador.refazerCaption(
-        caption,
-        feedback.trim(),
-        undefined,
-        provider,
-        effectiveModel
-      );
+      const res = await api.postador.refazerCaption(caption, feedback.trim(), undefined, provider, effectiveModel);
       setCaption(res.caption);
-      setMediaUrl(res.media_url ?? null);
       setFeedback("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao refazer caption.");
@@ -131,25 +143,48 @@ export function Postador() {
     }
   };
 
+  const temMidiaParaPublicar = mediaUrl || mediaUrls.length > 0;
+  const isCarousel = mediaType === "CAROUSEL" && mediaUrls.length > 1;
+
   const handlePublicar = async () => {
     if (!caption) return;
-    if (!mediaUrl) {
-      setError("Para publicar no feed é necessário uma imagem ou vídeo. Envie um arquivo ao gerar o caption (e configure o MinIO na API).");
+    if (!temMidiaParaPublicar) {
+      setError("É necessário pelo menos uma imagem ou vídeo para publicar.");
       return;
     }
     setError(null);
     setLoading(true);
     try {
-      const res = await api.postador.publicar(
-        caption,
-        mediaUrl,
-        mediaType ?? "IMAGE"
-      );
-      setPublishedId(res.id_container ?? null);
+      const payload = isCarousel
+        ? { caption, media_urls: mediaUrls, media_type: "IMAGE" as const }
+        : { caption, media_url: mediaUrl!, media_type: (mediaType ?? "IMAGE") as "IMAGE" | "REELS" };
+      const res = await api.postador.publicar(payload);
       setLinkPost(res.link_post ?? null);
       setStep("published");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao publicar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSalvarAgendar = async () => {
+    if (!caption) return;
+    if (!temMidiaParaPublicar) {
+      setError("Salve com pelo menos uma mídia para poder agendar.");
+      return;
+    }
+    setError(null);
+    setAgendadoSuccess(null);
+    setLoading(true);
+    try {
+      const payload = isCarousel
+        ? { caption, media_urls: mediaUrls, media_type: "CAROUSEL" as const }
+        : { caption, media_url: mediaUrl!, media_type: (mediaType ?? "IMAGE") as "IMAGE" | "REELS" };
+      await api.postador.saveAgendado(payload);
+      setAgendadoSuccess("Post salvo para agendar. Você pode publicá-lo na seção «Posts agendados».");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao salvar agendado.");
     } finally {
       setLoading(false);
     }
@@ -161,17 +196,15 @@ export function Postador() {
       return;
     }
     setError(null);
+    setFromUrl(true);
     setLoading(true);
     try {
-      const res = await api.postador.gerarPorUrl(
-        urlImovel.trim(),
-        provider,
-        currentModelInList ? model : modelsList[0]?.id ?? model
-      );
+      const res = await api.postador.gerarPorUrl(urlImovel.trim(), provider, effectiveModel);
       setCaption(res.caption);
       setMediaUrl(res.media_url ?? null);
+      setMediaUrls(res.media_url ? [res.media_url] : []);
       setMediaType("IMAGE");
-      setPreviewUrl(res.media_url ?? null);
+      setPreviewUrls(res.media_url ? [res.media_url] : []);
       setStep("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao gerar post a partir do link.");
@@ -180,26 +213,80 @@ export function Postador() {
     }
   };
 
+  const handleExcluirImagem = () => {
+    setMediaUrl(null);
+    setMediaUrls([]);
+    setPreviewUrls([]);
+  };
+
+  const handleGerarImagemIA = async () => {
+    const prompt = (promptImagemIA || caption || "").trim();
+    if (!prompt) {
+      setError("Digite uma descrição para gerar a imagem.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.postador.gerarImagem(prompt);
+      setMediaUrl(res.media_url);
+      setMediaUrls([res.media_url]);
+      setPreviewUrls([res.media_url]);
+      setPromptImagemIA("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao gerar imagem.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleIncluirImagem = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Envie apenas imagens (JPEG, PNG, etc.).");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.postador.uploadMidia(file);
+      setMediaUrl(res.media_url);
+      setMediaUrls([res.media_url]);
+      setPreviewUrls([res.media_url]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao enviar imagem.");
+    } finally {
+      setLoading(false);
+    }
+    e.target.value = "";
+  };
+
   const handleNovoPost = () => {
     setDescricao("");
     setUrlImovel("");
-    setArquivo(null);
+    setArquivos([]);
+    setCriarMidiaIA(false);
+    setInstrucoesImagem("");
     setCaption(null);
     setMediaUrl(null);
+    setMediaUrls([]);
     setMediaType(undefined);
-    setPreviewUrl(null);
+    setPreviewUrls([]);
+    setFromUrl(false);
     setFeedback("");
-    setPublishedId(null);
     setLinkPost(null);
+    setAgendadoSuccess(null);
+    setPromptImagemIA("");
     setStep("form");
     setError(null);
   };
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6 max-w-3xl">
       <h1 className="text-2xl font-semibold text-gray-900">Postador automático</h1>
       <p className="text-gray-600 mt-1 mb-6">
-        Descreva o que deseja postar. O caption será gerado para sua aprovação antes de publicar.
+        Descreva o post, use mídia pronta ou crie com IA. Revise o caption e publique agora ou salve para agendar.
       </p>
 
       {error && (
@@ -207,14 +294,17 @@ export function Postador() {
           {error}
         </div>
       )}
+      {agendadoSuccess && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-800 text-sm">
+          {agendadoSuccess}
+        </div>
+      )}
 
       {step === "form" && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div>
-              <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-1">
-                Provedor de IA
-              </label>
+              <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-1">Provedor de IA</label>
               <select
                 id="provider"
                 value={provider}
@@ -223,16 +313,12 @@ export function Postador() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               >
                 {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
+                  <option key={p.id} value={p.id}>{p.label}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-1">
-                Modelo / versão
-              </label>
+              <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
               <select
                 id="model"
                 value={currentModelInList ? model : modelsList[0]?.id ?? ""}
@@ -241,17 +327,14 @@ export function Postador() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               >
                 {modelsList.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
+                  <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
               </select>
             </div>
           </div>
+
           <div>
-            <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">
-              Descrição do post *
-            </label>
+            <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">Descrição do post *</label>
             <textarea
               id="descricao"
               rows={5}
@@ -262,24 +345,60 @@ export function Postador() {
               disabled={loading}
             />
           </div>
-          <div>
-            <label htmlFor="arquivo" className="block text-sm font-medium text-gray-700 mb-1">
-              Vídeo ou imagem (opcional)
-            </label>
+
+          <div className="flex items-center gap-2">
             <input
-              id="arquivo"
-              type="file"
-              accept="image/*,video/*"
-              className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
-              onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+              type="checkbox"
+              id="criar-midia-ia"
+              checked={criarMidiaIA}
+              onChange={(e) => setCriarMidiaIA(e.target.checked)}
               disabled={loading}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
-            {arquivo && (
-              <p className="mt-1 text-sm text-gray-500">
-                {arquivo.name} ({(arquivo.size / 1024).toFixed(1)} KB)
-              </p>
-            )}
+            <label htmlFor="criar-midia-ia" className="text-sm font-medium text-gray-700">
+              Criar mídia com IA (imagem gerada por DALL·E)
+            </label>
           </div>
+          {criarMidiaIA && (
+            <div>
+              <label htmlFor="instrucoes" className="block text-sm font-medium text-gray-700 mb-1">
+                Instruções para a imagem (opcional; se vazio, usa a descrição)
+              </label>
+              <textarea
+                id="instrucoes"
+                rows={2}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                placeholder="Ex.: Fotografia de sala ampla, luz natural, estilo moderno"
+                value={instrucoesImagem}
+                onChange={(e) => setInstrucoesImagem(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          )}
+
+          {!criarMidiaIA && (
+            <div>
+              <label htmlFor="arquivo" className="block text-sm font-medium text-gray-700 mb-1">
+                Imagem(ns) ou vídeo (opcional — várias imagens = carrossel)
+              </label>
+              <input
+                id="arquivo"
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+                onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
+                disabled={loading}
+              />
+              {arquivos.length > 0 && (
+                <p className="mt-1 text-sm text-gray-500">
+                  {arquivos.length} arquivo(s): {arquivos.map((f) => f.name).join(", ")}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
@@ -294,7 +413,7 @@ export function Postador() {
           <div className="pt-4 mt-4 border-t border-gray-200">
             <p className="text-sm font-medium text-gray-700 mb-2">Ou use o link do imóvel</p>
             <p className="text-xs text-gray-500 mb-2">
-              Cole a URL da página de detalhes do imóvel. O sistema raspa os dados, baixa a imagem (via Cloudinary) e gera o caption.
+              Cole a URL da página do imóvel. O sistema raspa os dados, baixa a imagem e gera o caption.
             </p>
             <div className="flex flex-wrap gap-2">
               <input
@@ -321,40 +440,94 @@ export function Postador() {
       {step === "review" && caption && (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Caption para aprovação
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Caption para aprovação</label>
             <pre className="w-full rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800 whitespace-pre-wrap font-sans max-h-64 overflow-y-auto">
               {caption}
             </pre>
           </div>
-          {(previewUrl || mediaUrl || (arquivo && arquivo.type.startsWith("video/"))) && (
-            <div>
-              <span className="block text-sm font-medium text-gray-700 mb-1">Mídia do post</span>
-              {mediaType === "REELS" || arquivo?.type.startsWith("video/") ? (
-                <p className="text-sm text-gray-600 py-2">Vídeo: {arquivo?.name ?? "Enviado"}</p>
-              ) : (previewUrl || mediaUrl) ? (
-                <img src={previewUrl ?? mediaUrl ?? ""} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
-              ) : null}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-3">
-            {!mediaUrl && (
-              <p className="text-amber-700 text-sm">Envie uma imagem ou vídeo ao gerar o caption para poder publicar (e configure MinIO na API).</p>
+
+          <div>
+            <span className="block text-sm font-medium text-gray-700 mb-1">Mídia do post</span>
+            {mediaType === "REELS" && (
+              <p className="text-sm text-gray-600 py-2">Vídeo enviado (não exibido aqui).</p>
+            )}
+            {previewUrls.length > 1 && (
+              <div className="flex gap-2 flex-wrap">
+                {previewUrls.map((url, i) => (
+                  <img key={i} src={url} alt={`Slide ${i + 1}`} className="h-32 w-32 object-cover rounded-md border border-gray-200" />
+                ))}
+              </div>
+            )}
+            {previewUrls.length === 1 && mediaType !== "REELS" && (
+              <img src={previewUrls[0]} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
+            )}
+            {fromUrl && (mediaType === "IMAGE" || !mediaType) && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleExcluirImagem}
+                  disabled={loading}
+                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
+                >
+                  Excluir imagem
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Descrição para gerar nova imagem (IA)"
+                    className="rounded-md border border-gray-300 px-2 py-1.5 text-sm flex-1 min-w-[160px]"
+                    value={promptImagemIA}
+                    onChange={(e) => setPromptImagemIA(e.target.value)}
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGerarImagemIA}
+                    disabled={loading}
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
+                  >
+                    {loading ? "Gerando..." : "Gerar imagem com IA"}
+                  </button>
+                </div>
+                <label className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 cursor-pointer">
+                  Incluir imagem
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={handleIncluirImagem}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3 items-center">
+            {!temMidiaParaPublicar && (
+              <p className="text-amber-700 text-sm">Adicione uma imagem ou vídeo para publicar (ou use «Gerar imagem com IA» / «Incluir imagem»).</p>
             )}
             <button
               type="button"
               onClick={handlePublicar}
-              disabled={loading || !mediaUrl}
+              disabled={loading || !temMidiaParaPublicar}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Publicando..." : "Aprovar e publicar"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSalvarAgendar}
+              disabled={loading || !temMidiaParaPublicar}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            >
+              Salvar para agendar
             </button>
             <div className="flex-1 min-w-[200px] flex flex-col gap-2">
               <textarea
                 rows={2}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="O que deseja alterar? (ex.: deixar mais curto, incluir #imoveis)"
+                placeholder="O que deseja alterar no caption?"
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 disabled={loading}
@@ -365,7 +538,7 @@ export function Postador() {
                 disabled={loading}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
               >
-                Quero alterar (refazer caption)
+                Refazer caption
               </button>
             </div>
           </div>
@@ -375,9 +548,6 @@ export function Postador() {
       {step === "published" && (
         <div className="rounded-md bg-green-50 border border-green-200 p-4">
           <p className="text-green-800 font-medium">Post publicado com sucesso.</p>
-          {publishedId && (
-            <p className="text-green-700 text-sm mt-1">ID: {publishedId}</p>
-          )}
           {linkPost && (
             <p className="mt-2">
               <a href={linkPost} target="_blank" rel="noopener noreferrer" className="text-green-700 underline">
@@ -395,13 +565,102 @@ export function Postador() {
         </div>
       )}
 
+      <AgendadosList onPublished={handleNovoPost} />
       <CronogramaList />
     </div>
   );
 }
 
+function AgendadosList({ onPublished }: { onPublished?: () => void }) {
+  const [list, setList] = useState<AgendadoItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    api.postador
+      .getAgendados()
+      .then((r) => setList(r.agendados ?? []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handlePublicar = async () => {
+    if (!selectedId) return;
+    setPublishingId(selectedId);
+    try {
+      await api.postador.publicarAgendado(selectedId);
+      setSelectedId(null);
+      load();
+      onPublished?.();
+    } catch {
+      // erro já pode aparecer no contexto do postador
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  if (list.length === 0 && !loading) return null;
+
+  return (
+    <div className="mt-10 pt-6 border-t border-gray-200">
+      <h2 className="text-lg font-semibold text-gray-900 mb-2">Posts agendados</h2>
+      <p className="text-sm text-gray-500 mb-3">Selecione um post e clique em «Publicar agora» para publicar.</p>
+      {loading ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : (
+        <ul className="space-y-2 max-h-64 overflow-y-auto">
+          {list.map((item) => (
+            <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm border-b border-gray-100 pb-2">
+              <input
+                type="radio"
+                name="agendado"
+                id={`ag-${item.id}`}
+                checked={selectedId === item.id}
+                onChange={() => setSelectedId(item.id)}
+                className="rounded-full border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label htmlFor={`ag-${item.id}`} className="flex-1 min-w-0 cursor-pointer">
+                <span className="text-gray-500 shrink-0">
+                  {new Date(item.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+                <span className="truncate max-w-[280px] ml-2 text-gray-700" title={item.caption}>
+                  {item.caption.length > 45 ? `${item.caption.slice(0, 45)}…` : item.caption}
+                </span>
+                {item.media_type === "CAROUSEL" && item.media_urls && (
+                  <span className="ml-1 text-gray-400">({item.media_urls.length} imagens)</span>
+                )}
+              </label>
+              <button
+                type="button"
+                onClick={handlePublicar}
+                disabled={publishingId !== null || selectedId !== item.id}
+                className="shrink-0 px-3 py-1 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {publishingId === item.id ? "Publicando..." : "Publicar agora"}
+              </button>
+              <button
+                type="button"
+                onClick={() => api.postador.deleteAgendado(item.id).then(load)}
+                className="shrink-0 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+              >
+                Excluir
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CronogramaList() {
-  const [list, setList] = useState<Array<{ id: string; caption: string; media_url: string | null; link_post: string | null; data_post: string }>>([]);
+  const [list, setList] = useState<Array<{ id: string; caption: string; media_url: string | null; link_post: string | null; data_post: string; media_type?: string | null }>>([]);
   const [loading, setLoading] = useState(false);
 
   const load = () => {
@@ -421,7 +680,7 @@ function CronogramaList() {
 
   return (
     <div className="mt-10 pt-6 border-t border-gray-200">
-      <h2 className="text-lg font-semibold text-gray-900 mb-2">Cronograma / posts publicados</h2>
+      <h2 className="text-lg font-semibold text-gray-900 mb-2">Cronograma — posts publicados</h2>
       {loading ? (
         <p className="text-gray-500 text-sm">Carregando...</p>
       ) : (
@@ -434,6 +693,7 @@ function CronogramaList() {
               <span className="truncate max-w-[200px] text-gray-700" title={item.caption}>
                 {item.caption.length > 50 ? `${item.caption.slice(0, 50)}…` : item.caption}
               </span>
+              {item.media_type === "CAROUSEL" && <span className="text-gray-400">Carrossel</span>}
               {item.link_post && (
                 <a href={item.link_post} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline shrink-0">
                   Ver
