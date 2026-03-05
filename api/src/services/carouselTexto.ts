@@ -36,18 +36,23 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   const origW = meta.width ?? 1024;
   const origH = meta.height ?? 1024;
 
-  const { w: width, h: height } = dimensionsForInstagram(origW, origH);
+  const target = dimensionsForInstagram(origW, origH);
 
-  const baseResized = await sharp(inputBuffer)
-    .resize(width, height, { fit: "inside", position: "centre" })
-    .toBuffer();
+  const basePipeline = sharp(inputBuffer).resize(target.w, target.h, {
+    fit: "inside",
+    position: "centre",
+  });
+  const baseResized = await basePipeline.toBuffer();
+  const actual = await sharp(baseResized).metadata();
+  const width = actual.width ?? target.w;
+  const height = actual.height ?? target.h;
 
   const safeText = String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-  const barTop = height - BAR_HEIGHT;
+  const barTop = Math.max(0, height - BAR_HEIGHT);
   const textY = height - BAR_HEIGHT / 2 + FONT_SIZE / 3;
   const textX = width / 2;
 
