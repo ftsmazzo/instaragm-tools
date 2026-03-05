@@ -1,20 +1,19 @@
 import sharp from "sharp";
-import { uploadBuffer } from "./cloudinary.js";
-import { isCloudinaryConfigured } from "./cloudinary.js";
+import { uploadMedia, isStorageConfigured } from "./storage.js";
 
-const FONT_SIZE = 48;
-const PADDING = 24;
+const FONT_SIZE = 52;
+const BAR_HEIGHT = 88;
+const MAX_IMAGE_SIDE = 1440;
 const FILL = "#ffffff";
-const STROKE = "#000000";
-const STROKE_WIDTH = 2;
+const BAR_FILL = "rgba(0,0,0,0.65)";
 
 /**
- * Baixa imagem de uma URL e adiciona texto (overlay SVG) na parte inferior.
- * Faz upload do resultado no Cloudinary e retorna a nova URL.
+ * Baixa imagem de uma URL e adiciona texto (overlay SVG) na parte inferior,
+ * com barra semi-transparente para legibilidade. Faz upload no Cloudinary.
  */
 async function addTextToImage(imageUrl: string, text: string): Promise<string> {
-  if (!isCloudinaryConfigured()) {
-    throw new Error("Cloudinary não configurada. Necessária para salvar as imagens com texto.");
+  if (!isStorageConfigured()) {
+    throw new Error("Configure um armazenamento (Cloudinary, local ou MinIO) para salvar as imagens com texto.");
   }
   const res = await fetch(imageUrl);
   if (!res.ok) throw new Error(`Não foi possível baixar a imagem: ${res.status}`);
@@ -24,27 +23,32 @@ async function addTextToImage(imageUrl: string, text: string): Promise<string> {
   const width = meta.width ?? 1024;
   const height = meta.height ?? 1024;
 
-  const safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const y = height - PADDING - FONT_SIZE;
-  const svg = `
-<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="${STROKE}" flood-opacity="0.8"/>
-    </filter>
-  </defs>
-  <text x="${width / 2}" y="${y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${FONT_SIZE}" font-weight="bold"
-        fill="${FILL}" stroke="${STROKE}" stroke-width="${STROKE_WIDTH}" filter="url(#shadow)">${safeText}</text>
+  const safeText = String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const barTop = height - BAR_HEIGHT;
+  const textY = height - BAR_HEIGHT / 2 + FONT_SIZE / 3;
+  const textX = width / 2;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect x="0" y="${barTop}" width="${width}" height="${BAR_HEIGHT}" fill="${BAR_FILL}"/>
+  <text x="${textX}" y="${textY}" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-size="${FONT_SIZE}" font-weight="bold" fill="${FILL}">${safeText}</text>
 </svg>`;
 
-  const overlay = Buffer.from(svg);
-  const output = await sharp(inputBuffer)
-    .composite([{ input: overlay, top: 0, left: 0 }])
-    .png()
+  const overlayBuffer = Buffer.from(svg);
+  const rasterized = await sharp(overlayBuffer)
+    .resize(width, height)
     .toBuffer();
 
-  const url = await uploadBuffer(output, "image/png", ".png");
-  return url;
+  const output = await sharp(inputBuffer)
+    .composite([{ input: rasterized, top: 0, left: 0 }])
+    .resize(MAX_IMAGE_SIDE, MAX_IMAGE_SIDE, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+
+  return uploadMedia(output, "image/jpeg", ".jpg");
 }
 
 /**

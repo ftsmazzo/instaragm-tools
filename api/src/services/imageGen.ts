@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { uploadBuffer } from "./cloudinary.js";
-import { isCloudinaryConfigured } from "./cloudinary.js";
+import { uploadMedia, isStorageConfigured } from "./storage.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GEMINI_API_KEY;
@@ -24,8 +23,8 @@ function getGemini(): GoogleGenAI {
  * Gera imagem com DALL·E 3 (OpenAI).
  */
 export async function gerarImagemOpenAI(prompt: string): Promise<string> {
-  if (!isCloudinaryConfigured()) {
-    throw new Error("Cloudinary não configurada. Configure CLOUDINARY_CLOUD_NAME (e preset) para salvar a imagem gerada.");
+  if (!isStorageConfigured()) {
+    throw new Error("Configure um armazenamento (Cloudinary, local ou MinIO) para salvar a imagem gerada.");
   }
   const openai = getOpenAI();
   const res = await openai.images.generate({
@@ -39,15 +38,15 @@ export async function gerarImagemOpenAI(prompt: string): Promise<string> {
   const b64 = res.data?.[0]?.b64_json;
   if (!b64) throw new Error("DALL·E não retornou imagem.");
   const buffer = Buffer.from(b64, "base64");
-  return uploadBuffer(buffer, "image/png", ".png");
+  return uploadMedia(buffer, "image/png", ".png");
 }
 
 /**
  * Gera imagem com Imagen (Google Gemini API). Melhor qualidade que DALL·E para fotos.
  */
 export async function gerarImagemGemini(prompt: string): Promise<string> {
-  if (!isCloudinaryConfigured()) {
-    throw new Error("Cloudinary não configurada. Configure CLOUDINARY_CLOUD_NAME (e preset) para salvar a imagem gerada.");
+  if (!isStorageConfigured()) {
+    throw new Error("Configure um armazenamento (Cloudinary, local ou MinIO) para salvar a imagem gerada.");
   }
   const ai = getGemini();
   const response = await ai.models.generateImages({
@@ -59,7 +58,7 @@ export async function gerarImagemGemini(prompt: string): Promise<string> {
   const b64 = generatedImages?.[0]?.image?.imageBytes;
   if (!b64) throw new Error("Imagen não retornou imagem.");
   const buffer = Buffer.from(b64, "base64");
-  return uploadBuffer(buffer, "image/png", ".png");
+  return uploadMedia(buffer, "image/png", ".png");
 }
 
 export type ImageGenProvider = "openai" | "gemini";

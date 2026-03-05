@@ -148,7 +148,15 @@ Recomendação: começar com **Opção A**; se a qualidade da legenda/imagem nã
 
 ---
 
-## MinIO em vez de Cloudinary
+## Armazenamento de mídia: Cloudinary, local (self-hosted) e MinIO
+
+- **Cloudinary (padrão):** Se `CLOUDINARY_*` estiver configurado, a API usa Cloudinary. Para evitar o erro "File size too large" (limite 10 MB no free tier), **imagens acima de ~9,5 MB são automaticamente redimensionadas** (lado máximo 1440px) e convertidas para JPEG (qualidade 85) antes do upload.
+- **Armazenamento local (self-hosted):** Defina `POSTADOR_STORAGE=local` e `POSTADOR_MEDIA_BASE_URL=https://sua-api.90qhxz.easypanel.host`. Os arquivos são salvos em `data/uploads/` e servidos por `GET /api/postador/media/:filename`. **Para persistir entre restarts**, monte um volume no EasyPanel no caminho `data` (ou `DATA_DIR`) do container da API. Assim você não depende do Cloudinary nem do MinIO.
+- **MinIO:** Usado se Cloudinary não estiver configurado e `POSTADOR_STORAGE` não for `local`. No EasyPanel use `MINIO_INTERNAL_URL` para a API e `MINIO_PUBLIC_URL` para o Instagram acessar a mídia.
+
+---
+
+## MinIO em vez de Cloudinary (referência)
 
 - **Upload**: API recebe o arquivo (multipart) e envia ao MinIO (SDK S3-compatível).
 - **URL para o Instagram**: a Graph API exige URL **publicamente acessível** no momento da chamada. Duas formas:

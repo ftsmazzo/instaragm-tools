@@ -1,5 +1,5 @@
 import { parse } from "node-html-parser";
-import { isCloudinaryConfigured, uploadBuffer } from "./cloudinary.js";
+import { uploadMedia, isStorageConfigured } from "./storage.js";
 
 // Dentro do EasyPanel a API não resolve o host público do site. Use URL interna para o fetch.
 const SITE_IMOVEIS_PUBLIC_HOST = (process.env.SITE_IMOVEIS_PUBLIC_HOST ?? "").trim().toLowerCase();
@@ -210,11 +210,11 @@ export function montarDescricaoParaCaption(d: ImovelDados): string {
 }
 
 /**
- * Baixa a imagem da URL e faz upload no Cloudinary. Retorna a URL pública.
+ * Baixa a imagem da URL e faz upload (Cloudinary, local ou MinIO). Retorna a URL pública.
  */
 export async function baixarEEnviarParaCloudinary(imageUrl: string): Promise<{ url: string; contentType: string }> {
-  if (!isCloudinaryConfigured()) {
-    throw new Error("Cloudinary não configurado. Defina CLOUDINARY_CLOUD_NAME para usar post por URL do imóvel.");
+  if (!isStorageConfigured()) {
+    throw new Error("Configure um armazenamento (Cloudinary, POSTADOR_STORAGE=local ou MinIO) para usar post por URL do imóvel.");
   }
   const res = await fetch(imageUrl, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; PostadorImovel/1.0)" },
@@ -223,6 +223,6 @@ export async function baixarEEnviarParaCloudinary(imageUrl: string): Promise<{ u
   const buffer = Buffer.from(await res.arrayBuffer());
   const contentType = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
   const ext = contentType === "image/png" ? ".png" : contentType === "image/webp" ? ".webp" : ".jpg";
-  const url = await uploadBuffer(buffer, contentType, ext);
+  const url = await uploadMedia(buffer, contentType, ext);
   return { url, contentType };
 }

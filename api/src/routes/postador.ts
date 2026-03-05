@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from "fastify";
-import { Readable } from "stream";
+import { createReadStream } from "fs";
+import { stat } from "fs/promises";
+import { join } from "path";
 import { gerarCaption as gerarCaptionIA, refazerCaption as refazerCaptionIA } from "../services/caption.js";
-import { isCloudinaryConfigured, uploadBuffer } from "../services/cloudinary.js";
-import { isMinioConfigured, uploadStream } from "../services/minio.js";
+import { uploadMedia, getUploadsDir, isStorageConfigured } from "../services/storage.js";
 import { rasparPaginaImovel, montarDescricaoParaCaption, baixarEEnviarParaCloudinary } from "../services/imovel.js";
 import { publishToInstagram, publishCarouselToInstagram } from "../services/instagram.js";
 import { gerarImagemComIA } from "../services/imageGen.js";
@@ -23,10 +24,35 @@ function extFromMimetype(mimetype: string): string {
   return map[mimetype.toLowerCase()] ?? ".bin";
 }
 
+const SAFE_FILENAME = /^[a-zA-Z0-9._-]+$/;
+
 /**
- * Postador: IA no backend, MinIO para mídia, Graph API para publicar, cronograma para histórico.
+ * Postador: IA no backend, armazenamento (Cloudinary / local / MinIO), Graph API para publicar.
  */
 export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
+  // GET /api/postador/media/:filename — serve arquivos do armazenamento local (self-hosted)
+  fastify.get<{ Params: { filename: string } }>("/media/:filename", async (request, reply) => {
+    const { filename } = request.params;
+    if (!filename || !SAFE_FILENAME.test(filename) || filename.includes("..")) {
+      return reply.status(400).send({ error: "Nome de arquivo inválido." });
+    }
+    const dir = getUploadsDir();
+    const path = join(dir, filename);
+    try {
+      const st = await stat(path);
+      if (!st.isFile()) return reply.status(404).send({ error: "Não encontrado." });
+      const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+      const types: Record<string, string> = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
+        ".mp4": "video/mp4", ".mov": "video/quicktime",
+      };
+      const contentType = types[ext] ?? "application/octet-stream";
+      return reply.header("Content-Type", contentType).header("Cache-Control", "public, max-age=86400").send(createReadStream(path));
+    } catch {
+      return reply.status(404).send({ error: "Não encontrado." });
+    }
+  });
+
   // GET /api/postador/cronograma — lista de posts finalizados (para cronograma/histórico)
   fastify.get("/cronograma", async (_request, reply) => {
     const list = await listCronograma();
@@ -158,11 +184,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
         }
         const buffer = Buffer.concat(chunks);
         const ext = extFromMimetype(mimetype);
-        if (isCloudinaryConfigured()) {
-          mediaUrl = await uploadBuffer(buffer, mimetype, ext);
-        } else if (isMinioConfigured()) {
-          mediaUrl = await uploadStream(Readable.from(buffer), mimetype, ext);
-        }
+        mediaUrl = await uploadMedia(buffer, mimetype, ext);
         break;
       }
     }
@@ -234,7 +256,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       let mediaUrl: string | undefined;
-      if (dados.imageUrl && isCloudinaryConfigured()) {
+      if (dados.imageUrl && isStorageConfigured()) {
         const { url: cloudUrl } = await baixarEEnviarParaCloudinary(dados.imageUrl);
         mediaUrl = cloudUrl;
       }
@@ -296,24 +318,15 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
               return reply.status(400).send({ error: "Não misture vídeo com várias imagens. Envie um vídeo ou apenas imagens para carrossel." });
             }
             mediaType = "REELS";
-            if (isCloudinaryConfigured()) {
-              mediaUrl = await uploadBuffer(buffer, mimetype, ext);
-            } else if (isMinioConfigured()) {
-              mediaUrl = await uploadStream(Readable.from(buffer), mimetype, ext);
-            }
+            mediaUrl = await uploadMedia(buffer, mimetype, ext);
             break;
           }
           if (mimetype.startsWith("image/")) {
             if (mediaType === "REELS") {
               return reply.status(400).send({ error: "Não misture vídeo com imagens." });
             }
-            if (isCloudinaryConfigured()) {
-              const url = await uploadBuffer(buffer, mimetype, ext);
-              uploadedUrls.push(url);
-            } else if (isMinioConfigured()) {
-              const url = await uploadStream(Readable.from(buffer), mimetype, ext);
-              uploadedUrls.push(url);
-            }
+            const url = await uploadMedia(buffer, mimetype, ext);
+            uploadedUrls.push(url);
           }
         }
       }
