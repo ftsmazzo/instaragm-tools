@@ -6,7 +6,8 @@ import { isMinioConfigured, uploadStream } from "../services/minio.js";
 import { rasparPaginaImovel, montarDescricaoParaCaption, baixarEEnviarParaCloudinary } from "../services/imovel.js";
 import { publishToInstagram, publishCarouselToInstagram } from "../services/instagram.js";
 import { gerarImagemComIA } from "../services/imageGen.js";
-import { loadConfig } from "../store/config.js";
+import { adicionarTextoCarrossel } from "../services/carouselTexto.js";
+import { loadConfig, getContaParaPublicar } from "../store/config.js";
 import { appendCronograma, listCronograma } from "../store/cronograma.js";
 import { listAgendados, addAgendado, getAgendado, deleteAgendado } from "../store/agendados.js";
 
@@ -84,22 +85,23 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ ok: true });
   });
 
-  // POST /api/postador/agendados/:id/publicar — publicar um agendado agora
+  // POST /api/postador/agendados/:id/publicar — publicar um agendado agora (body: conta_id opcional)
   fastify.post<{ Params: { id: string } }>("/agendados/:id/publicar", async (request, reply) => {
     const { id } = request.params;
+    const body = request.body as { conta_id?: string };
     const agendado = await getAgendado(id);
     if (!agendado) {
       return reply.status(404).send({ error: "Agendado não encontrado." });
     }
 
     const config = await loadConfig();
-    const token = config.instagram?.access_token?.trim();
-    const igUserId = config.instagram?.ig_user_id?.trim();
-    if (!token || !igUserId) {
+    const creds = getContaParaPublicar(config, body?.conta_id);
+    if (!creds) {
       return reply.status(400).send({
-        error: "Configure as credenciais do Instagram em Administração.",
+        error: "Nenhuma conta Instagram configurada ou conta não encontrada. Configure em Administração.",
       });
     }
+    const { token, igUserId } = creds;
 
     try {
       if (agendado.media_type === "CAROUSEL" && agendado.media_urls?.length) {
@@ -170,22 +172,42 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ media_url: mediaUrl });
   });
 
-  // POST /api/postador/gerar-imagem — gera imagem com DALL-E e retorna URL (Cloudinary)
+  // POST /api/postador/gerar-imagem — gera imagem com IA (openai = DALL·E, gemini = Imagen) e retorna URL (Cloudinary)
   fastify.post("/gerar-imagem", async (request, reply) => {
-    const body = request.body as { prompt?: string };
+    const body = request.body as { prompt?: string; provider?: string };
     const prompt = (body?.prompt ?? "").trim();
+    const provider = (body?.provider === "gemini" ? "gemini" : "openai") as "openai" | "gemini";
     if (!prompt) {
       return reply.status(400).send({ error: "Campo 'prompt' é obrigatório (descrição da imagem desejada)." });
     }
     try {
-      const media_url = await gerarImagemComIA(prompt);
+      const media_url = await gerarImagemComIA(prompt, provider);
       return reply.send({ media_url });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao gerar imagem.";
-      if (msg.includes("OPENAI_API_KEY") || msg.includes("Cloudinary")) {
+      if (msg.includes("OPENAI_API_KEY") || msg.includes("GEMINI_API_KEY") || msg.includes("Cloudinary")) {
         return reply.status(503).send({ error: msg });
       }
       fastify.log.error({ err }, "gerar-imagem");
+      return reply.status(500).send({ error: msg });
+    }
+  });
+
+  // POST /api/postador/carousel-adicionar-texto — overlay de texto em cada imagem do carrossel; retorna novas URLs
+  fastify.post("/carousel-adicionar-texto", async (request, reply) => {
+    const body = request.body as { image_urls?: string[]; texts?: string[] };
+    const imageUrls = Array.isArray(body?.image_urls) ? body.image_urls.filter((u) => typeof u === "string" && u.trim()) : [];
+    const texts = Array.isArray(body?.texts) ? body.texts.map((t) => (typeof t === "string" ? t : "")) : [];
+    if (!imageUrls.length) {
+      return reply.status(400).send({ error: "Campo 'image_urls' (array) é obrigatório." });
+    }
+    try {
+      const newUrls = await adicionarTextoCarrossel(imageUrls, texts);
+      return reply.send({ image_urls: newUrls });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao adicionar texto nas imagens.";
+      if (msg.includes("Cloudinary")) return reply.status(503).send({ error: msg });
+      fastify.log.error({ err }, "carousel-adicionar-texto");
       return reply.status(500).send({ error: msg });
     }
   });
@@ -379,10 +401,10 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // POST /api/postador/publicar — JSON: { caption, media_url?, media_urls?, media_type? }
-  // Se media_urls (array com 2+ itens): publica carrossel. Senão: media_url + media_type (IMAGE ou REELS).
+  // POST /api/postador/publicar — JSON: { caption, media_url?, media_urls?, media_type?, conta_id? }
+  // Se media_urls (array com 2+ itens): publica carrossel. conta_id: qual conta Instagram usar.
   fastify.post("/publicar", async (request, reply) => {
-    const body = request.body as { caption?: string; media_url?: string; media_urls?: string[]; media_type?: string };
+    const body = request.body as { caption?: string; media_url?: string; media_urls?: string[]; media_type?: string; conta_id?: string };
     const caption = (body?.caption ?? "").trim();
     const mediaUrl = body?.media_url?.trim();
     const mediaUrls = Array.isArray(body?.media_urls) ? body.media_urls.filter((u) => typeof u === "string" && u.trim()) : [];
@@ -405,14 +427,14 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const config = await loadConfig();
-    const token = config.instagram?.access_token?.trim();
-    const igUserId = config.instagram?.ig_user_id?.trim();
-    if (!token || !igUserId) {
-      fastify.log.info({ reason: "instagram_credentials_missing", hasToken: Boolean(token), hasIgUserId: Boolean(igUserId) }, "publicar 400");
+    const creds = getContaParaPublicar(config, body?.conta_id);
+    if (!creds) {
+      fastify.log.info({ reason: "instagram_credentials_missing" }, "publicar 400");
       return reply.status(400).send({
-        error: "Configure as credenciais do Instagram em Administração: token de acesso e ID do usuário Instagram.",
+        error: "Nenhuma conta Instagram configurada ou conta não encontrada. Configure em Administração.",
       });
     }
+    const { token, igUserId } = creds;
 
     try {
       if (isCarousel) {

@@ -25,9 +25,26 @@ async function fetchJson<T>(path: string, options?: FetchOptions): Promise<T> {
 }
 
 export type Health = { status: string; timestamp: string };
+
+export type ContaInstagramRes = {
+  id: string;
+  nome: string;
+  ig_user_id: string;
+  has_token: boolean;
+};
+
 export type Config = {
-  instagram: { connected: boolean; ig_user_id?: string; access_token?: string };
   empresa: { nome: string };
+  contas_instagram: ContaInstagramRes[];
+  instagram_default_id: string | null;
+  instagram?: { connected: boolean; ig_user_id?: string };
+};
+
+export type ContaInstagramInput = {
+  id?: string;
+  nome: string;
+  ig_user_id: string;
+  access_token?: string;
 };
 
 export type CronogramaItem = {
@@ -77,7 +94,12 @@ export type RasparResponse = PostagensResponse & { triggered: boolean };
 export const api = {
   getHealth: () => fetchJson<Health>("/health"),
   getConfig: () => fetchJson<Config>("/api/config"),
-  putConfig: (body: Config) =>
+  putConfig: (body: {
+    empresa?: { nome: string };
+    contas_instagram?: ContaInstagramInput[];
+    instagram_default_id?: string | null;
+    instagram?: { access_token?: string; ig_user_id?: string };
+  }) =>
     fetchJson<{ saved: boolean; received: Config }>("/api/config", {
       method: "PUT",
       body,
@@ -140,6 +162,7 @@ export const api = {
       media_url?: string;
       media_urls?: string[];
       media_type?: "IMAGE" | "REELS";
+      conta_id?: string | null;
     }) =>
       fetchJson<{ ok: boolean; id_container?: string; id_media?: string; link_post?: string; message?: string }>("/api/postador/publicar", {
         method: "POST",
@@ -161,15 +184,20 @@ export const api = {
       }),
     deleteAgendado: (id: string) =>
       fetchJson<{ ok: boolean }>(`/api/postador/agendados/${id}`, { method: "DELETE" }),
-    publicarAgendado: (id: string) =>
+    publicarAgendado: (id: string, conta_id?: string | null) =>
       fetchJson<{ ok: boolean; id_container?: string; id_media?: string; link_post?: string; message?: string }>(
         `/api/postador/agendados/${id}/publicar`,
-        { method: "POST" }
+        { method: "POST", body: { conta_id: conta_id ?? undefined } }
       ),
-    gerarImagem: (prompt: string) =>
+    gerarImagem: (prompt: string, provider?: "openai" | "gemini") =>
       fetchJson<{ media_url: string }>("/api/postador/gerar-imagem", {
         method: "POST",
-        body: { prompt },
+        body: { prompt, provider: provider ?? "openai" },
+      }),
+    carouselAdicionarTexto: (image_urls: string[], texts: string[]) =>
+      fetchJson<{ image_urls: string[] }>("/api/postador/carousel-adicionar-texto", {
+        method: "POST",
+        body: { image_urls, texts },
       }),
     uploadMidia: (file: File) => {
       const form = new FormData();

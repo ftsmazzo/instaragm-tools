@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { api, type AgendadoItem } from "../api/client";
+import { api, type AgendadoItem, type ContaInstagramRes } from "../api/client";
 
 const STORAGE_KEY = "postador_ia";
 
@@ -48,7 +48,9 @@ export function Postador() {
   const [urlImovel, setUrlImovel] = useState("");
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [criarMidiaIA, setCriarMidiaIA] = useState(false);
+  const [provedorImagem, setProvedorImagem] = useState<"openai" | "gemini">("gemini");
   const [instrucoesImagem, setInstrucoesImagem] = useState("");
+  const [textosCarrossel, setTextosCarrossel] = useState<string[]>([]);
   const [caption, setCaption] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
@@ -63,6 +65,10 @@ export function Postador() {
   const [agendadoSuccess, setAgendadoSuccess] = useState<string | null>(null);
   const [promptImagemIA, setPromptImagemIA] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [contasInstagram, setContasInstagram] = useState<ContaInstagramRes[]>([]);
+  const [contaPadraoId, setContaPadraoId] = useState<string | null>(null);
+  const [contaSelecionadaId, setContaSelecionadaId] = useState<string | null>(null);
 
   const [provider, setProvider] = useState(loadSavedIA().provider);
   const [model, setModel] = useState(loadSavedIA().model);
@@ -79,6 +85,26 @@ export function Postador() {
     if (!currentModelInList && modelsList.length) setModel(modelsList[0].id);
   }, [provider]);
 
+  useEffect(() => {
+    if (previewUrls.length > 1 && textosCarrossel.length !== previewUrls.length) {
+      setTextosCarrossel((prev) => {
+        const next = [...prev];
+        while (next.length < previewUrls.length) next.push("");
+        return next.slice(0, previewUrls.length);
+      });
+    }
+  }, [previewUrls.length]);
+
+  useEffect(() => {
+    api.getConfig().then((c) => {
+      const contas = c.contas_instagram ?? [];
+      setContasInstagram(contas);
+      const defaultId = c.instagram_default_id ?? contas[0]?.id ?? null;
+      setContaPadraoId(defaultId);
+      setContaSelecionadaId((prev) => (prev && contas.some((x) => x.id === prev)) ? prev : defaultId);
+    }).catch(() => {});
+  }, []);
+
   const handleGerarCaption = async () => {
     if (!descricao.trim()) {
       setError("Informe a descrição do que deseja postar.");
@@ -91,7 +117,7 @@ export function Postador() {
       let urlGerada: string | null = null;
       if (criarMidiaIA) {
         const prompt = (instrucoesImagem || descricao).trim();
-        const resImg = await api.postador.gerarImagem(prompt);
+        const resImg = await api.postador.gerarImagem(prompt, provedorImagem);
         urlGerada = resImg.media_url;
       }
       const files = arquivos.length ? arquivos : undefined;
@@ -117,6 +143,8 @@ export function Postador() {
       } else {
         setPreviewUrls([]);
       }
+      const numPreviews = (tipo === "CAROUSEL" && res.media_urls?.length) ? res.media_urls.length : (res.media_url || urlGerada || (arquivos.length === 1 && arquivos[0]?.type.startsWith("image/"))) ? 1 : 0;
+      setTextosCarrossel(new Array(numPreviews).fill(""));
       setStep("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao gerar caption.");
@@ -156,8 +184,8 @@ export function Postador() {
     setLoading(true);
     try {
       const payload = isCarousel
-        ? { caption, media_urls: mediaUrls, media_type: "IMAGE" as const }
-        : { caption, media_url: mediaUrl!, media_type: (mediaType ?? "IMAGE") as "IMAGE" | "REELS" };
+        ? { caption, media_urls: mediaUrls, media_type: "IMAGE" as const, conta_id: contaSelecionadaId }
+        : { caption, media_url: mediaUrl!, media_type: (mediaType ?? "IMAGE") as "IMAGE" | "REELS", conta_id: contaSelecionadaId };
       const res = await api.postador.publicar(payload);
       setLinkPost(res.link_post ?? null);
       setStep("published");
@@ -235,6 +263,22 @@ export function Postador() {
       setPromptImagemIA("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao gerar imagem.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAplicarTextoCarrossel = async () => {
+    if (mediaUrls.length < 2) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await api.postador.carouselAdicionarTexto(mediaUrls, textosCarrossel);
+      const urls = res.image_urls ?? [];
+      setMediaUrls(urls);
+      setPreviewUrls(urls);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Falha ao adicionar texto nas imagens.");
     } finally {
       setLoading(false);
     }
@@ -356,14 +400,26 @@ export function Postador() {
               className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
             <label htmlFor="criar-midia-ia" className="text-sm font-medium text-gray-700">
-              Criar mídia com IA (imagem gerada por DALL·E)
+              Criar mídia com IA (imagem)
             </label>
           </div>
           {criarMidiaIA && (
-            <div>
-              <label htmlFor="instrucoes" className="block text-sm font-medium text-gray-700 mb-1">
-                Instruções para a imagem (opcional; se vazio, usa a descrição)
-              </label>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Provedor de imagem</label>
+                <select
+                  value={provedorImagem}
+                  onChange={(e) => setProvedorImagem(e.target.value as "openai" | "gemini")}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="gemini">Imagen (Google) — melhor para fotos</option>
+                  <option value="openai">DALL·E (OpenAI)</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="instrucoes" className="block text-sm font-medium text-gray-700 mb-1">
+                  Instruções para a imagem (opcional; se vazio, usa a descrição)
+                </label>
               <textarea
                 id="instrucoes"
                 rows={2}
@@ -373,6 +429,7 @@ export function Postador() {
                 onChange={(e) => setInstrucoesImagem(e.target.value)}
                 disabled={loading}
               />
+              </div>
             </div>
           )}
 
@@ -452,11 +509,44 @@ export function Postador() {
               <p className="text-sm text-gray-600 py-2">Vídeo enviado (não exibido aqui).</p>
             )}
             {previewUrls.length > 1 && (
-              <div className="flex gap-2 flex-wrap">
-                {previewUrls.map((url, i) => (
-                  <img key={i} src={url} alt={`Slide ${i + 1}`} className="h-32 w-32 object-cover rounded-md border border-gray-200" />
-                ))}
-              </div>
+              <>
+                <div className="flex gap-2 flex-wrap">
+                  {previewUrls.map((url, i) => (
+                    <img key={i} src={url} alt={`Slide ${i + 1}`} className="h-32 w-32 object-cover rounded-md border border-gray-200" />
+                  ))}
+                </div>
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Texto em cada imagem (opcional)</p>
+                  <p className="text-xs text-gray-500 mb-2">Digite o texto que será sobreposto em cada slide. Deixe em branco para não alterar.</p>
+                  <div className="space-y-2 mb-2">
+                    {previewUrls.map((_, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500 w-8">#{i + 1}</span>
+                        <input
+                          type="text"
+                          value={textosCarrossel[i] ?? ""}
+                          onChange={(e) => setTextosCarrossel((prev) => {
+                            const next = [...prev];
+                            next[i] = e.target.value;
+                            return next;
+                          })}
+                          placeholder={`Texto da imagem ${i + 1}`}
+                          className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                          disabled={loading}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAplicarTextoCarrossel}
+                    disabled={loading}
+                    className="px-3 py-1.5 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
+                  >
+                    {loading ? "Aplicando..." : "Aplicar texto nas imagens"}
+                  </button>
+                </div>
+              </>
             )}
             {previewUrls.length === 1 && mediaType !== "REELS" && (
               <img src={previewUrls[0]} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
@@ -503,6 +593,21 @@ export function Postador() {
             )}
           </div>
 
+          {contasInstagram.length > 1 && (
+            <div>
+              <label htmlFor="conta-post" className="block text-sm font-medium text-gray-700 mb-1">Publicar na conta</label>
+              <select
+                id="conta-post"
+                value={contaSelecionadaId ?? ""}
+                onChange={(e) => setContaSelecionadaId(e.target.value || null)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:ring-1 focus:ring-indigo-500"
+              >
+                {contasInstagram.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome || c.ig_user_id}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3 items-center">
             {!temMidiaParaPublicar && (
               <p className="text-amber-700 text-sm">Adicione uma imagem ou vídeo para publicar (ou use «Gerar imagem com IA» / «Incluir imagem»).</p>
@@ -565,17 +670,26 @@ export function Postador() {
         </div>
       )}
 
-      <AgendadosList onPublished={handleNovoPost} />
+      <AgendadosList contas={contasInstagram} contaPadraoId={contaPadraoId} onPublished={handleNovoPost} />
       <CronogramaList />
     </div>
   );
 }
 
-function AgendadosList({ onPublished }: { onPublished?: () => void }) {
+function AgendadosList({
+  contas,
+  contaPadraoId,
+  onPublished,
+}: {
+  contas: ContaInstagramRes[];
+  contaPadraoId: string | null;
+  onPublished?: () => void;
+}) {
   const [list, setList] = useState<AgendadoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [contaIdParaPublicar, setContaIdParaPublicar] = useState<string | null>(contaPadraoId ?? contas[0]?.id ?? null);
 
   const load = () => {
     setLoading(true);
@@ -590,11 +704,16 @@ function AgendadosList({ onPublished }: { onPublished?: () => void }) {
     load();
   }, []);
 
+  useEffect(() => {
+    const defaultId = contaPadraoId ?? contas[0]?.id ?? null;
+    setContaIdParaPublicar((prev) => (prev && contas.some((c) => c.id === prev)) ? prev : defaultId);
+  }, [contas, contaPadraoId]);
+
   const handlePublicar = async () => {
     if (!selectedId) return;
     setPublishingId(selectedId);
     try {
-      await api.postador.publicarAgendado(selectedId);
+      await api.postador.publicarAgendado(selectedId, contaIdParaPublicar);
       setSelectedId(null);
       load();
       onPublished?.();
@@ -611,6 +730,21 @@ function AgendadosList({ onPublished }: { onPublished?: () => void }) {
     <div className="mt-10 pt-6 border-t border-gray-200">
       <h2 className="text-lg font-semibold text-gray-900 mb-2">Posts agendados</h2>
       <p className="text-sm text-gray-500 mb-3">Selecione um post e clique em «Publicar agora» para publicar.</p>
+      {contas.length > 1 && (
+        <div className="mb-3">
+          <label htmlFor="agendado-conta" className="block text-sm font-medium text-gray-700 mb-1">Publicar na conta</label>
+          <select
+            id="agendado-conta"
+            value={contaIdParaPublicar ?? ""}
+            onChange={(e) => setContaIdParaPublicar(e.target.value || null)}
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {contas.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome || c.ig_user_id}</option>
+            ))}
+          </select>
+        </div>
+      )}
       {loading ? (
         <p className="text-gray-500 text-sm">Carregando...</p>
       ) : (
