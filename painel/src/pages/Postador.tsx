@@ -889,7 +889,6 @@ export function Postador() {
       )}
 
       <AgendadosList contas={contasInstagram} contaPadraoId={contaPadraoId} onPublished={handleNovoPost} />
-      <CronogramaList />
     </div>
   );
 }
@@ -1003,54 +1002,6 @@ function AgendadosList({
               >
                 Excluir
               </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function CronogramaList() {
-  const [list, setList] = useState<Array<{ id: string; caption: string; media_url: string | null; link_post: string | null; data_post: string; media_type?: string | null }>>([]);
-  const [loading, setLoading] = useState(false);
-
-  const load = () => {
-    setLoading(true);
-    api.postador
-      .getCronograma()
-      .then((r) => setList(r.cronograma ?? []))
-      .catch(() => setList([]))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  if (list.length === 0 && !loading) return null;
-
-  return (
-    <div className="mt-10 pt-6 border-t border-gray-200">
-      <h2 className="text-lg font-semibold text-gray-900 mb-2">Cronograma — posts publicados</h2>
-      {loading ? (
-        <p className="text-gray-500 text-sm">Carregando...</p>
-      ) : (
-        <ul className="space-y-2 max-h-64 overflow-y-auto">
-          {list.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm border-b border-gray-100 pb-2">
-              <span className="text-gray-500 shrink-0">
-                {new Date(item.data_post).toLocaleString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-              </span>
-              <span className="truncate max-w-[200px] text-gray-700" title={item.caption}>
-                {item.caption.length > 50 ? `${item.caption.slice(0, 50)}…` : item.caption}
-              </span>
-              {item.media_type === "CAROUSEL" && <span className="text-gray-400">Carrossel</span>}
-              {item.link_post && (
-                <a href={item.link_post} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline shrink-0">
-                  Ver
-                </a>
-              )}
             </li>
           ))}
         </ul>
