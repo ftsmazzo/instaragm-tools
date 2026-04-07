@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { api, type AgendadoItem, type ContaInstagramRes } from "../api/client";
 
 const STORAGE_KEY = "postador_ia";
@@ -42,6 +43,9 @@ function saveIA(provider: string, model: string) {
 }
 
 type Step = "form" | "review" | "published";
+/** Passos do assistente antes de gerar (só em step === "form") */
+type WizardStep = 1 | 2 | 3;
+type ContentMode = "descricao" | "link";
 
 export function Postador() {
   const [descricao, setDescricao] = useState("");
@@ -58,6 +62,8 @@ export function Postador() {
   const [mediaType, setMediaType] = useState<"IMAGE" | "REELS" | "CAROUSEL" | undefined>(undefined);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [fromUrl, setFromUrl] = useState(false);
+  const [contentMode, setContentMode] = useState<ContentMode>("descricao");
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -319,6 +325,8 @@ export function Postador() {
     setMediaType(undefined);
     setPreviewUrls([]);
     setFromUrl(false);
+    setContentMode("descricao");
+    setWizardStep(1);
     setFeedback("");
     setLinkPost(null);
     setAgendadoSuccess(null);
@@ -327,11 +335,19 @@ export function Postador() {
     setError(null);
   };
 
+  const podeAvancarPasso1 = contasInstagram.length === 0 || Boolean(contaSelecionadaId);
+
+  const wizardLabels = [
+    { n: 1 as const, title: "Conta", short: "1" },
+    { n: 2 as const, title: "IA da legenda", short: "2" },
+    { n: 3 as const, title: "Conteúdo", short: "3" },
+  ];
+
   return (
     <div className="p-6 max-w-3xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Postador automático</h1>
+      <h1 className="text-2xl font-semibold text-gray-900">Postador</h1>
       <p className="text-gray-600 mt-1 mb-6">
-        Descreva o post, use mídia pronta ou crie com IA. Revise o caption e publique agora ou salve para agendar.
+        Siga os passos: escolha a conta, o modelo de IA e como montar o post. Depois revise e publique ou agende.
       </p>
 
       {error && (
@@ -346,157 +362,348 @@ export function Postador() {
       )}
 
       {step === "form" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <div>
-              <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-1">Provedor de IA</label>
-              <select
-                id="provider"
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-                disabled={loading}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              >
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
-              <select
-                id="model"
-                value={currentModelInList ? model : modelsList[0]?.id ?? ""}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={loading}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              >
-                {modelsList.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">Descrição do post *</label>
-            <textarea
-              id="descricao"
-              rows={5}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              placeholder="Ex.: Casa em condomínio, 3 quartos, Ribeirão Preto..."
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="criar-midia-ia"
-              checked={criarMidiaIA}
-              onChange={(e) => setCriarMidiaIA(e.target.checked)}
-              disabled={loading}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-            />
-            <label htmlFor="criar-midia-ia" className="text-sm font-medium text-gray-700">
-              Criar mídia com IA (imagem)
-            </label>
-          </div>
-          {criarMidiaIA && (
-            <div className="space-y-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Provedor de imagem</label>
-                <select
-                  value={provedorImagem}
-                  onChange={(e) => setProvedorImagem(e.target.value as "openai" | "gemini")}
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+        <div className="space-y-6">
+          {/* Indicador de passos */}
+          <nav aria-label="Progresso" className="flex items-center gap-2 flex-wrap">
+            {wizardLabels.map(({ n, title, short }, i) => (
+              <div key={n} className="flex items-center gap-2">
+                {i > 0 && <span className="text-gray-300 hidden sm:inline">→</span>}
+                <button
+                  type="button"
+                  onClick={() => n < wizardStep && setWizardStep(n)}
+                  disabled={n > wizardStep || loading}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    wizardStep === n
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : n < wizardStep
+                        ? "bg-indigo-50 text-indigo-800 hover:bg-indigo-100 cursor-pointer"
+                        : "bg-gray-100 text-gray-400 cursor-default"
+                  }`}
                 >
-                  <option value="gemini">Imagen (Google) — melhor para fotos</option>
-                  <option value="openai">DALL·E (OpenAI)</option>
-                </select>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-xs font-bold">{short}</span>
+                  {title}
+                </button>
               </div>
-              <div>
-                <label htmlFor="instrucoes" className="block text-sm font-medium text-gray-700 mb-1">
-                  Instruções para a imagem (opcional; se vazio, usa a descrição)
-                </label>
-              <textarea
-                id="instrucoes"
-                rows={2}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="Ex.: Fotografia de sala ampla, luz natural, estilo moderno"
-                value={instrucoesImagem}
-                onChange={(e) => setInstrucoesImagem(e.target.value)}
-                disabled={loading}
-              />
-              </div>
-            </div>
-          )}
+            ))}
+          </nav>
 
-          {!criarMidiaIA && (
-            <div>
-              <label htmlFor="arquivo" className="block text-sm font-medium text-gray-700 mb-1">
-                Imagem(ns) ou vídeo (opcional — várias imagens = carrossel)
-              </label>
-              <input
-                id="arquivo"
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
-                onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
-                disabled={loading}
-              />
-              {arquivos.length > 0 && (
-                <p className="mt-1 text-sm text-gray-500">
-                  {arquivos.length} arquivo(s): {arquivos.map((f) => f.name).join(", ")}
+          {/* Passo 1 — Conta */}
+          {wizardStep === 1 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Onde vai publicar?</h2>
+              <p className="text-sm text-gray-600">Selecione a conta Instagram. Essa escolha será usada ao publicar ou ao disparar um post agendado daqui.</p>
+              {contasInstagram.length === 0 ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-medium">Nenhuma conta configurada</p>
+                  <p className="mt-1">
+                    Cadastre em{" "}
+                    <Link to="/admin" className="underline font-medium text-amber-950">
+                      Administração
+                    </Link>
+                    . Você ainda pode gerar legenda para testar, mas não publicará sem conta.
+                  </p>
+                </div>
+              ) : contasInstagram.length === 1 ? (
+                <p className="text-sm text-gray-800">
+                  Conta: <strong>{contasInstagram[0].nome || contasInstagram[0].ig_user_id}</strong>
+                  {contasInstagram[0].has_token ? <span className="ml-2 text-green-600 text-xs">(token ok)</span> : null}
                 </p>
+              ) : (
+                <div>
+                  <label htmlFor="wizard-conta" className="block text-sm font-medium text-gray-700 mb-1">
+                    Conta Instagram
+                  </label>
+                  <select
+                    id="wizard-conta"
+                    value={contaSelecionadaId ?? ""}
+                    onChange={(e) => setContaSelecionadaId(e.target.value || null)}
+                    disabled={loading}
+                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    {contasInstagram.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome || c.ig_user_id}
+                        {c.id === contaPadraoId ? " (padrão)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  disabled={loading || !podeAvancarPasso1}
+                  className="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  Continuar
+                </button>
+              </div>
             </div>
           )}
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleGerarCaption}
-              disabled={loading || !descricao.trim()}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {loading ? "Gerando..." : "Gerar caption"}
-            </button>
-          </div>
-
-          <div className="pt-4 mt-4 border-t border-gray-200">
-            <p className="text-sm font-medium text-gray-700 mb-2">Ou use o link do imóvel</p>
-            <p className="text-xs text-gray-500 mb-2">
-              Cole a URL da página do imóvel. O sistema raspa os dados, baixa a imagem e gera o caption.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <input
-                type="url"
-                value={urlImovel}
-                onChange={(e) => setUrlImovel(e.target.value)}
-                placeholder="https://.../imoveis/..."
-                className="flex-1 min-w-[200px] rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                onClick={handleGerarPorUrl}
-                disabled={loading || !urlImovel.trim()}
-                className="inline-flex items-center px-4 py-2 border border-indigo-200 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                {loading ? "Processando..." : "Gerar post do link"}
-              </button>
+          {/* Passo 2 — IA */}
+          {wizardStep === 2 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Modelo de IA para a legenda</h2>
+              <p className="text-sm text-gray-600">Escolha o provedor e o modelo que geram o texto do post (e refinos com «Refazer caption»).</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-1">
+                    Provedor
+                  </label>
+                  <select
+                    id="provider"
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    {PROVIDERS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-1">
+                    Modelo
+                  </label>
+                  <select
+                    id="model"
+                    value={currentModelInList ? model : modelsList[0]?.id ?? ""}
+                    onChange={(e) => setModel(e.target.value)}
+                    disabled={loading}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    {modelsList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(1)}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(3)}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-md bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
+                >
+                  Continuar
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Passo 3 — Tipo de conteúdo */}
+          {wizardStep === 3 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-5">
+              <h2 className="text-lg font-semibold text-gray-900">Como montar o post?</h2>
+              <p className="text-sm text-gray-600">Escolha uma opção. Só as ações da opção selecionada aparecem abaixo.</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentMode("descricao");
+                    setFromUrl(false);
+                  }}
+                  disabled={loading}
+                  className={`rounded-xl border-2 p-4 text-left transition-all ${
+                    contentMode === "descricao"
+                      ? "border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600"
+                      : "border-gray-200 hover:border-gray-300 bg-gray-50/50"
+                  }`}
+                >
+                  <span className="block font-semibold text-gray-900">Descrição e mídia</span>
+                  <span className="mt-1 block text-sm text-gray-600">Texto livre, upload opcional ou imagem gerada por IA.</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContentMode("link");
+                    setFromUrl(true);
+                  }}
+                  disabled={loading}
+                  className={`rounded-xl border-2 p-4 text-left transition-all ${
+                    contentMode === "link"
+                      ? "border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600"
+                      : "border-gray-200 hover:border-gray-300 bg-gray-50/50"
+                  }`}
+                >
+                  <span className="block font-semibold text-gray-900">Link do imóvel</span>
+                  <span className="mt-1 block text-sm text-gray-600">Cole a URL da página; o sistema raspa dados e imagem.</span>
+                </button>
+              </div>
+
+              {contentMode === "descricao" && (
+                <div className="space-y-4 pt-2 border-t border-gray-100">
+                  <div>
+                    <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-1">
+                      Descrição do post *
+                    </label>
+                    <textarea
+                      id="descricao"
+                      rows={5}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      placeholder="Ex.: Casa em condomínio, 3 quartos, Ribeirão Preto..."
+                      value={descricao}
+                      onChange={(e) => setDescricao(e.target.value)}
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="criar-midia-ia"
+                      checked={criarMidiaIA}
+                      onChange={(e) => setCriarMidiaIA(e.target.checked)}
+                      disabled={loading}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <label htmlFor="criar-midia-ia" className="text-sm font-medium text-gray-700">
+                      Criar mídia com IA (imagem)
+                    </label>
+                  </div>
+                  {criarMidiaIA && (
+                    <div className="space-y-2 pl-1 border-l-2 border-indigo-100">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Provedor de imagem</label>
+                        <select
+                          value={provedorImagem}
+                          onChange={(e) => setProvedorImagem(e.target.value as "openai" | "gemini")}
+                          className="rounded-md border border-gray-300 px-3 py-2 text-sm w-full max-w-md"
+                        >
+                          <option value="gemini">Imagen (Google)</option>
+                          <option value="openai">DALL·E (OpenAI)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="instrucoes" className="block text-sm font-medium text-gray-700 mb-1">
+                          Instruções para a imagem (opcional)
+                        </label>
+                        <textarea
+                          id="instrucoes"
+                          rows={2}
+                          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                          placeholder="Se vazio, usa a descrição do post"
+                          value={instrucoesImagem}
+                          onChange={(e) => setInstrucoesImagem(e.target.value)}
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {!criarMidiaIA && (
+                    <div>
+                      <label htmlFor="arquivo" className="block text-sm font-medium text-gray-700 mb-1">
+                        Imagem(ns) ou vídeo (opcional — várias imagens = carrossel)
+                      </label>
+                      <input
+                        id="arquivo"
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+                        onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
+                        disabled={loading}
+                      />
+                      {arquivos.length > 0 && (
+                        <p className="mt-1 text-sm text-gray-500">
+                          {arquivos.length} arquivo(s): {arquivos.map((f) => f.name).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleGerarCaption}
+                    disabled={loading || !descricao.trim()}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {loading ? "Gerando..." : "Gerar legenda e seguir para revisão"}
+                  </button>
+                </div>
+              )}
+
+              {contentMode === "link" && (
+                <div className="space-y-4 pt-2 border-t border-gray-100">
+                  <div>
+                    <label htmlFor="url-imovel" className="block text-sm font-medium text-gray-700 mb-1">
+                      URL da página do imóvel
+                    </label>
+                    <input
+                      id="url-imovel"
+                      type="url"
+                      value={urlImovel}
+                      onChange={(e) => setUrlImovel(e.target.value)}
+                      placeholder="https://.../imoveis/..."
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      disabled={loading}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">A API acessa a página, extrai dados e imagem e gera a legenda.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGerarPorUrl}
+                    disabled={loading || !urlImovel.trim()}
+                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {loading ? "Processando..." : "Gerar post e seguir para revisão"}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex justify-start pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(2)}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Voltar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {step === "review" && caption && (
         <div className="space-y-4">
+          {contasInstagram.length > 0 && contaSelecionadaId && (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <span>
+                Publicar em:{" "}
+                <strong>{contasInstagram.find((c) => c.id === contaSelecionadaId)?.nome || contaSelecionadaId}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("form");
+                  setWizardStep(1);
+                }}
+                className="text-indigo-600 hover:underline text-xs font-medium"
+              >
+                Alterar conta
+              </button>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Caption para aprovação</label>
             <pre className="w-full rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800 whitespace-pre-wrap font-sans max-h-64 overflow-y-auto">
