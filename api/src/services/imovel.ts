@@ -1,16 +1,33 @@
 import { parse } from "node-html-parser";
 import { uploadMedia, isStorageConfigured } from "./storage.js";
 
-// Dentro do EasyPanel a API não resolve o host público do site. Use URL interna para o fetch.
-const SITE_IMOVEIS_PUBLIC_HOST = (process.env.SITE_IMOVEIS_PUBLIC_HOST ?? "").trim().toLowerCase();
+// Dentro do EasyPanel a API não resolve o host público do site (EAI_AGAIN). O fetch usa a origem interna.
+const SITE_IMOVEIS_PUBLIC_HOST_RAW = (process.env.SITE_IMOVEIS_PUBLIC_HOST ?? "").trim();
 const SITE_IMOVEIS_INTERNAL_ORIGIN = (process.env.SITE_IMOVEIS_INTERNAL_ORIGIN ?? "").trim();
 
-function urlParaFetch(userUrl: string): string {
-  if (!SITE_IMOVEIS_PUBLIC_HOST || !SITE_IMOVEIS_INTERNAL_ORIGIN) return userUrl;
+function publicHostsList(): string[] {
+  return SITE_IMOVEIS_PUBLIC_HOST_RAW.split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Converte URL pública do site de imóveis em URL acessível de dentro do Docker (serviço interno).
+ * - Com SITE_IMOVEIS_PUBLIC_HOST: um ou vários hosts separados por vírgula.
+ * - Sem PUBLIC_HOST mas com SITE_IMOVEIS_INTERNAL_ORIGIN: heurística só para URLs típicas do EasyPanel
+ *   (hostname contém "site-imoveis" e termina em .easypanel.host), para não depender de copiar o host exato.
+ */
+export function urlParaFetchImovel(userUrl: string): string {
+  const internal = SITE_IMOVEIS_INTERNAL_ORIGIN.replace(/\/$/, "");
+  if (!internal) return userUrl;
   try {
     const u = new URL(userUrl);
-    if (u.hostname.toLowerCase() === SITE_IMOVEIS_PUBLIC_HOST) {
-      const internal = SITE_IMOVEIS_INTERNAL_ORIGIN.replace(/\/$/, "");
+    const host = u.hostname.toLowerCase();
+    const listed = publicHostsList();
+    const explicit = listed.length > 0 && listed.includes(host);
+    const heuristic =
+      listed.length === 0 && host.includes("site-imoveis") && host.endsWith(".easypanel.host");
+    if (explicit || heuristic) {
       return `${internal}${u.pathname}${u.search}`;
     }
   } catch {
@@ -45,10 +62,27 @@ function resolveUrl(base: string, path: string): string {
  * Tenta primeiro __NEXT_DATA__ (Next.js), depois meta/og e parsing HTML.
  */
 export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
-  const fetchUrl = urlParaFetch(url);
-  const res = await fetch(fetchUrl, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; PostadorImovel/1.0)" },
-  });
+  const fetchUrl = urlParaFetchImovel(url);
+  let res: Response;
+  try {
+    res = await fetch(fetchUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; PostadorImovel/1.0)" },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const dns = msg.includes("EAI_AGAIN") || msg.includes("getaddrinfo");
+    if (dns && fetchUrl === url && !SITE_IMOVEIS_INTERNAL_ORIGIN) {
+      throw new Error(
+        "A API não conseguiu resolver o site do imóvel (DNS). No EasyPanel defina SITE_IMOVEIS_INTERNAL_ORIGIN com a URL interna do app (ex.: http://nome-do-servico:3000) e, opcionalmente, SITE_IMOVEIS_PUBLIC_HOST com o host público."
+      );
+    }
+    if (dns && fetchUrl === url) {
+      throw new Error(
+        "A API não resolve o host público. Confira SITE_IMOVEIS_INTERNAL_ORIGIN e se o link do imóvel é do site esperado (ou defina SITE_IMOVEIS_PUBLIC_HOST=host.exato)."
+      );
+    }
+    throw e;
+  }
   if (!res.ok) throw new Error(`Não foi possível acessar a página: ${res.status}`);
   const html = await res.text();
   const baseUrl = url.replace(/\/[^/]*$/, "/");
@@ -78,7 +112,7 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
         const img = imovel.imagem ?? imovel.foto ?? imovel.image ?? imovel.images;
         if (typeof img === "string") imageUrl = img.startsWith("http") ? img : new URL(img, baseUrl).href;
         else if (Array.isArray(img) && img[0]) imageUrl = String(img[0]).startsWith("http") ? String(img[0]) : new URL(String(img[0]), baseUrl).href;
-        if (imageUrl) imageUrl = urlParaFetch(imageUrl);
+        if (imageUrl) imageUrl = urlParaFetchImovel(imageUrl);
         return {
           titulo,
           codigo,
@@ -113,7 +147,7 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
     root.querySelector("img")?.getAttribute("src") ||
     null;
   let absoluteImageUrl: string | null = imageUrl ? resolveUrl(url, imageUrl) : null;
-  if (absoluteImageUrl) absoluteImageUrl = urlParaFetch(absoluteImageUrl);
+  if (absoluteImageUrl) absoluteImageUrl = urlParaFetchImovel(absoluteImageUrl);
 
   // Título: h1 ou og:title ou title
   const titulo =
