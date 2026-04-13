@@ -32,6 +32,16 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
 
     await ensureTables();
     const pool = getPool();
+    const orgJoinCols = `
+                  ia.organization_id::text AS organization_id,
+                  o.name AS org_name,
+                  COALESCE(o.nome_fantasia, '') AS org_nome_fantasia,
+                  COALESCE(o.segmento, '') AS org_segmento,
+                  COALESCE(o.cidade, '') AS org_cidade,
+                  COALESCE(o.tom_voz, '') AS org_tom_voz,
+                  COALESCE(o.sobre, '') AS org_sobre,
+                  COALESCE(o.objetivo_qualificacao, '') AS org_objetivo_qualificacao`;
+
     const r = contaId
       ? await pool.query<{
           id: string;
@@ -45,6 +55,12 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
           agent_prompt_direct: string;
           organization_id: string;
           org_name: string;
+          org_nome_fantasia: string;
+          org_segmento: string;
+          org_cidade: string;
+          org_tom_voz: string;
+          org_sobre: string;
+          org_objetivo_qualificacao: string;
         }>(
           `SELECT ia.id, ia.nome, ia.ig_user_id, ia.access_token,
                   COALESCE(ia.agent_access_token, '') AS agent_access_token,
@@ -52,8 +68,7 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
                   COALESCE(ia.agent_nome, '') AS agent_nome,
                   COALESCE(ia.agent_prompt_comentarios, '') AS agent_prompt_comentarios,
                   COALESCE(ia.agent_prompt_direct, '') AS agent_prompt_direct,
-                  ia.organization_id::text AS organization_id,
-                  o.name AS org_name
+                  ${orgJoinCols}
            FROM instagram_accounts ia
            JOIN organizations o ON o.id = ia.organization_id
            WHERE ia.id = $1
@@ -72,6 +87,12 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
           agent_prompt_direct: string;
           organization_id: string;
           org_name: string;
+          org_nome_fantasia: string;
+          org_segmento: string;
+          org_cidade: string;
+          org_tom_voz: string;
+          org_sobre: string;
+          org_objetivo_qualificacao: string;
         }>(
           `SELECT ia.id, ia.nome, ia.ig_user_id, ia.access_token,
                   COALESCE(ia.agent_access_token, '') AS agent_access_token,
@@ -79,8 +100,7 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
                   COALESCE(ia.agent_nome, '') AS agent_nome,
                   COALESCE(ia.agent_prompt_comentarios, '') AS agent_prompt_comentarios,
                   COALESCE(ia.agent_prompt_direct, '') AS agent_prompt_direct,
-                  ia.organization_id::text AS organization_id,
-                  o.name AS org_name
+                  ${orgJoinCols}
            FROM instagram_accounts ia
            JOIN organizations o ON o.id = ia.organization_id
            WHERE ia.ig_user_id = $1
@@ -92,6 +112,25 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
       return reply.status(404).send({ error: "Conta não encontrada." });
     }
 
+    let crm_resumo = { leads: 0, comentarios: 0, direct: 0 };
+    try {
+      const c = await pool.query<{
+        leads: number;
+        comentarios: number;
+        direct: number;
+      }>(
+        `SELECT
+          (SELECT COUNT(*)::int FROM leads WHERE organization_id = $1::uuid) AS leads,
+          (SELECT COUNT(*)::int FROM comentarios WHERE organization_id = $1::uuid) AS comentarios,
+          (SELECT COUNT(*)::int FROM direct WHERE organization_id = $1::uuid) AS direct`,
+        [row.organization_id]
+      );
+      const z = c.rows[0];
+      if (z) crm_resumo = { leads: z.leads, comentarios: z.comentarios, direct: z.direct };
+    } catch {
+      /* tabelas CRM ainda não criadas ou schema antigo */
+    }
+
     return reply.send({
       ok: true,
       conta_id: row.id,
@@ -99,6 +138,16 @@ export async function internalAgentRoutes(app: FastifyInstance, _opts: FastifyPl
       nome: row.nome,
       organization_id: row.organization_id,
       empresa_nome: row.org_name,
+      empresa_perfil: {
+        nome: row.org_name,
+        nome_fantasia: row.org_nome_fantasia,
+        segmento: row.org_segmento,
+        cidade: row.org_cidade,
+        tom_voz: row.org_tom_voz,
+        sobre: row.org_sobre,
+        objetivo_qualificacao: row.org_objetivo_qualificacao,
+      },
+      crm_resumo,
       agent_ativo: row.agent_ativo,
       agent_nome: row.agent_nome,
       agent_prompt_comentarios: row.agent_prompt_comentarios,

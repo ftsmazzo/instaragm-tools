@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
-import { loadConfig, saveConfig, type ContaInstagramInput } from "../store/config.js";
+import { loadConfig, saveConfig, type ContaInstagramInput, type EmpresaPerfil } from "../store/config.js";
 import { toContaInstagramPublic } from "../util/instagramPublic.js";
 
 export async function configRoutes(
@@ -11,7 +11,15 @@ export async function configRoutes(
     const config = await loadConfig();
     const contas = config.contas_instagram.map(toContaInstagramPublic);
     return reply.send({
-      empresa: config.empresa ?? { nome: "" },
+      empresa: config.empresa ?? {
+        nome: "",
+        nome_fantasia: "",
+        segmento: "",
+        cidade: "",
+        tom_voz: "",
+        sobre: "",
+        objetivo_qualificacao: "",
+      },
       contas_instagram: contas,
       instagram_default_id: config.instagram_default_id ?? null,
       // Retrocompat: primeira conta como "instagram" para quem ainda espera um único
@@ -24,15 +32,15 @@ export async function configRoutes(
   // PUT – salvar configuração (empresa, lista de contas, conta padrão)
   app.put("/", async (request, reply) => {
     const body = request.body as {
-      empresa?: { nome?: string };
+      empresa?: Partial<EmpresaPerfil>;
       contas_instagram?: ContaInstagramInput[];
       instagram_default_id?: string | null;
       // Retrocompat: um único instagram vira uma conta
       instagram?: { access_token?: string; ig_user_id?: string };
     };
     const update: Parameters<typeof saveConfig>[0] = {};
-    if (body.empresa && typeof body.empresa.nome === "string") {
-      update.empresa = { nome: body.empresa.nome };
+    if (body.empresa && typeof body.empresa === "object") {
+      update.empresa = body.empresa;
     }
     if (body.instagram_default_id !== undefined) {
       update.instagram_default_id = body.instagram_default_id ?? null;

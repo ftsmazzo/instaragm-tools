@@ -19,8 +19,20 @@ export type ContaInstagram = {
   agent_prompt_direct?: string;
 };
 
+/** Dados da empresa no workspace (além do nome legal/registro em `nome`). */
+export type EmpresaPerfil = {
+  nome: string;
+  nome_fantasia: string;
+  segmento: string;
+  cidade: string;
+  tom_voz: string;
+  sobre: string;
+  /** O que o agente deve qualificar no lead (multi-segmento; ex.: agendar consulta, orçamento). */
+  objetivo_qualificacao: string;
+};
+
 export type ConfigStore = {
-  empresa: { nome: string };
+  empresa: EmpresaPerfil;
   /** Múltiplas contas Instagram para postar. */
   contas_instagram: ContaInstagram[];
   /** ID da conta usada por padrão ao publicar (quando o painel não envia conta_id). */
@@ -29,8 +41,18 @@ export type ConfigStore = {
   instagram?: { access_token?: string; ig_user_id?: string };
 };
 
+export const emptyEmpresa = (): EmpresaPerfil => ({
+  nome: "",
+  nome_fantasia: "",
+  segmento: "",
+  cidade: "",
+  tom_voz: "",
+  sobre: "",
+  objetivo_qualificacao: "",
+});
+
 const defaultConfig: ConfigStore = {
-  empresa: { nome: "" },
+  empresa: emptyEmpresa(),
   contas_instagram: [],
   instagram_default_id: null,
 };
@@ -53,8 +75,9 @@ function normalizeConfig(parsed: Partial<ConfigStore>): ConfigStore {
     });
   }
 
+  const emp = { ...emptyEmpresa(), ...(parsed.empresa ?? {}) };
   return {
-    empresa: { ...defaultConfig.empresa, ...parsed.empresa },
+    empresa: emp,
     contas_instagram: contas,
     instagram_default_id: defaultId ?? (contas[0]?.id ?? null),
     instagram: parsed.instagram,
@@ -161,8 +184,17 @@ export async function saveConfig(config: Partial<Omit<ConfigStore, "contas_insta
   if (config.instagram_default_id !== undefined) {
     defaultId = config.instagram_default_id?.trim() || null;
   }
-  if (config.empresa?.nome !== undefined) {
-    current.empresa.nome = config.empresa.nome;
+  if (config.empresa) {
+    const e = config.empresa;
+    const emp = { ...current.empresa };
+    if (e.nome !== undefined) emp.nome = e.nome.trim() || "Empresa";
+    if (e.nome_fantasia !== undefined) emp.nome_fantasia = (e.nome_fantasia ?? "").trim();
+    if (e.segmento !== undefined) emp.segmento = (e.segmento ?? "").trim();
+    if (e.cidade !== undefined) emp.cidade = (e.cidade ?? "").trim();
+    if (e.tom_voz !== undefined) emp.tom_voz = (e.tom_voz ?? "").trim();
+    if (e.sobre !== undefined) emp.sobre = (e.sobre ?? "").trim();
+    if (e.objetivo_qualificacao !== undefined) emp.objetivo_qualificacao = (e.objetivo_qualificacao ?? "").trim();
+    current.empresa = emp;
   }
 
   const next: ConfigStore = {

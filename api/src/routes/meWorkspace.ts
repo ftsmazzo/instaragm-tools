@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import { isDbConfigured } from "../db/index.js";
 import { loadWorkspaceConfigStore, saveWorkspaceConfig } from "../store/workspace.js";
-import type { ContaInstagramInput } from "../store/config.js";
+import { emptyEmpresa, type ContaInstagramInput, type EmpresaPerfil } from "../store/config.js";
 import { toContaInstagramPublic } from "../util/instagramPublic.js";
 
 export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPluginOptions) {
@@ -21,7 +21,7 @@ export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPlug
     const config = await loadWorkspaceConfigStore(u.orgId);
     const contas = config.contas_instagram.map(toContaInstagramPublic);
     return reply.send({
-      empresa: config.empresa ?? { nome: "" },
+      empresa: config.empresa ?? emptyEmpresa(),
       contas_instagram: contas,
       instagram_default_id: config.instagram_default_id ?? null,
       instagram: contas[0]
@@ -33,13 +33,13 @@ export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPlug
   app.put("/workspace", async (request, reply) => {
     const u = request.user as { orgId: string };
     const body = request.body as {
-      empresa?: { nome?: string };
+      empresa?: Partial<EmpresaPerfil>;
       contas_instagram?: ContaInstagramInput[];
       instagram_default_id?: string | null;
     };
     const update: Parameters<typeof saveWorkspaceConfig>[1] = {};
-    if (body.empresa && typeof body.empresa.nome === "string") {
-      update.empresa = { nome: body.empresa.nome };
+    if (body.empresa && typeof body.empresa === "object") {
+      update.empresa = body.empresa;
     }
     if (body.instagram_default_id !== undefined) {
       update.instagram_default_id = body.instagram_default_id ?? null;

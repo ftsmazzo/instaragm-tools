@@ -75,8 +75,19 @@ export type ContaInstagramRes = {
   agent_prompt_direct: string;
 };
 
+/** Perfil da empresa (workspace + automações). */
+export type EmpresaPerfilRes = {
+  nome: string;
+  nome_fantasia: string;
+  segmento: string;
+  cidade: string;
+  tom_voz: string;
+  sobre: string;
+  objetivo_qualificacao: string;
+};
+
 export type Config = {
-  empresa: { nome: string };
+  empresa: EmpresaPerfilRes;
   contas_instagram: ContaInstagramRes[];
   instagram_default_id: string | null;
   instagram?: { connected: boolean; ig_user_id?: string };
@@ -167,7 +178,7 @@ export const api = {
   getMe: () => fetchJson<{ user: { id: string; email: string; organization_id: string } }>("/api/auth/me"),
   getMeWorkspace: () => fetchJson<Config>("/api/me/workspace"),
   putMeWorkspace: (body: {
-    empresa?: { nome: string };
+    empresa?: Partial<EmpresaPerfilRes>;
     contas_instagram?: ContaInstagramInput[];
     instagram_default_id?: string | null;
   }) =>
@@ -177,7 +188,7 @@ export const api = {
     }),
   getConfig: () => fetchJson<Config>("/api/config"),
   putConfig: (body: {
-    empresa?: { nome: string };
+    empresa?: Partial<EmpresaPerfilRes>;
     contas_instagram?: ContaInstagramInput[];
     instagram_default_id?: string | null;
     instagram?: { access_token?: string; ig_user_id?: string };

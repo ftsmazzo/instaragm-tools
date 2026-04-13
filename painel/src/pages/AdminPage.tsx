@@ -7,7 +7,24 @@ import {
   type Config,
   type ContaInstagramRes,
   type ContaInstagramInput,
+  type EmpresaPerfilRes,
 } from "../api/client";
+
+function emptyEmpresa(): EmpresaPerfilRes {
+  return {
+    nome: "",
+    nome_fantasia: "",
+    segmento: "",
+    cidade: "",
+    tom_voz: "",
+    sobre: "",
+    objetivo_qualificacao: "",
+  };
+}
+
+function mergeEmpresa(e?: Partial<EmpresaPerfilRes>): EmpresaPerfilRes {
+  return { ...emptyEmpresa(), ...e };
+}
 
 const PROMPT_COMENTARIOS_PADRAO = `Você responde comentários no Instagram em nome da empresa. Seja cordial, objetivo e profissional. Não prometa o que não pode cumprir. Para valores, visitas ou negociação, convide a pessoa a enviar mensagem direta.`;
 
@@ -31,7 +48,7 @@ export function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nome, setNome] = useState("");
+  const [empresa, setEmpresa] = useState<EmpresaPerfilRes>(emptyEmpresa);
   const [editId, setEditId] = useState<string | "new" | null>(null);
   const [form, setForm] = useState(emptyContaForm);
   /** Dados vêm de /api/me/workspace (organização + contas no PostgreSQL). */
@@ -58,7 +75,7 @@ export function AdminPage() {
             const data = await api.getMeWorkspace();
             if (cancelled) return;
             setConfig(data);
-            setNome(data.empresa?.nome ?? "");
+            setEmpresa(mergeEmpresa(data.empresa));
             setUseWorkspace(true);
             setNeedLogin(false);
           } catch {
@@ -71,7 +88,7 @@ export function AdminPage() {
           const data = await api.getConfig();
           if (cancelled) return;
           setConfig(data);
-          setNome(data.empresa?.nome ?? "");
+          setEmpresa(mergeEmpresa(data.empresa));
           setUseWorkspace(false);
           setNeedLogin(false);
         }
@@ -94,8 +111,8 @@ export function AdminPage() {
     setError(null);
     const p =
       useWorkspace && getAuthToken()
-        ? api.putMeWorkspace({ empresa: { nome } })
-        : api.putConfig({ empresa: { nome } });
+        ? api.putMeWorkspace({ empresa })
+        : api.putConfig({ empresa });
     p.then((res) =>
       setConfig((c) => (c ? { ...c, empresa: res.received?.empresa ?? c.empresa } : null))
     )
@@ -201,7 +218,7 @@ export function AdminPage() {
   };
 
   const aplicarGerarAgente = () => {
-    const nomeAssistente = (form.agent_nome.trim() || form.nome.trim() || nome.trim() || "Assistente").slice(0, 120);
+    const nomeAssistente = (form.agent_nome.trim() || form.nome.trim() || empresa.nome.trim() || "Assistente").slice(0, 120);
     setForm((f) => ({
       ...f,
       agent_ativo: true,
@@ -245,25 +262,73 @@ export function AdminPage() {
 
       {!needLogin && (
       <div className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nome da empresa</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Ex.: Minha Empresa"
-            />
-            <button
-              type="button"
-              onClick={handleSaveEmpresa}
-              disabled={saving}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
-            >
-              Salvar
-            </button>
-          </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+          <h2 className="text-lg font-medium text-gray-900">Dados da empresa</h2>
+          <p className="text-sm text-gray-500">
+            Esses campos alimentam a API (<code className="text-xs bg-gray-100 px-1 rounded">empresa_perfil</code> no{" "}
+            <code className="text-xs bg-gray-100 px-1 rounded">agent-config</code>) para montar contexto no n8n sem repetir tudo nos prompts.
+          </p>
+          <label className="block text-sm font-medium text-gray-700">Nome (razão social / registro)</label>
+          <input
+            type="text"
+            value={empresa.nome}
+            onChange={(e) => setEmpresa((x) => ({ ...x, nome: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            placeholder="Ex.: Fabrica IA"
+          />
+          <label className="block text-sm font-medium text-gray-700">Nome fantasia / marca</label>
+          <input
+            type="text"
+            value={empresa.nome_fantasia}
+            onChange={(e) => setEmpresa((x) => ({ ...x, nome_fantasia: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            placeholder="Como a marca aparece para o público"
+          />
+          <label className="block text-sm font-medium text-gray-700">Segmento</label>
+          <input
+            type="text"
+            value={empresa.segmento}
+            onChange={(e) => setEmpresa((x) => ({ ...x, segmento: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            placeholder="Ex.: imobiliária, clínica, e-commerce"
+          />
+          <label className="block text-sm font-medium text-gray-700">Cidade / região de atuação</label>
+          <input
+            type="text"
+            value={empresa.cidade}
+            onChange={(e) => setEmpresa((x) => ({ ...x, cidade: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          />
+          <label className="block text-sm font-medium text-gray-700">Tom de voz (curto)</label>
+          <input
+            type="text"
+            value={empresa.tom_voz}
+            onChange={(e) => setEmpresa((x) => ({ ...x, tom_voz: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            placeholder="Ex.: cordial e direto; sem jargão excessivo"
+          />
+          <label className="block text-sm font-medium text-gray-700">Sobre a empresa</label>
+          <textarea
+            value={empresa.sobre}
+            onChange={(e) => setEmpresa((x) => ({ ...x, sobre: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[80px]"
+            placeholder="1–3 frases: o que faz, para quem, diferencial."
+          />
+          <label className="block text-sm font-medium text-gray-700">Objetivo de qualificação (multi-segmento)</label>
+          <textarea
+            value={empresa.objetivo_qualificacao}
+            onChange={(e) => setEmpresa((x) => ({ ...x, objetivo_qualificacao: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[72px]"
+            placeholder="O que o agente deve descobrir no lead (ex.: interesse em compra, agendar visita, orçamento)."
+          />
+          <button
+            type="button"
+            onClick={handleSaveEmpresa}
+            disabled={saving}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+          >
+            Salvar dados da empresa
+          </button>
         </div>
 
         <div>

@@ -86,6 +86,15 @@ ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_prompt_comentarios
 ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_prompt_direct text NOT NULL DEFAULT '';
 `;
 
+const ORG_PROFILE_COLS = `
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS nome_fantasia text NOT NULL DEFAULT '';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS segmento text NOT NULL DEFAULT '';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS cidade text NOT NULL DEFAULT '';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS tom_voz text NOT NULL DEFAULT '';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS sobre text NOT NULL DEFAULT '';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS objetivo_qualificacao text NOT NULL DEFAULT '';
+`;
+
 /** CRM do agente (postagens, comentarios, direct, leads) — mesmo banco da API, escopo por organization_id.
  * Espelha api/migrations/004_agent_crm_tables.sql (deploy só inclui dist; SQL duplicado aqui). */
 const AGENT_CRM_SQL = `
@@ -180,6 +189,7 @@ export async function ensureTables(): Promise<void> {
   const p = getPool();
   await p.query(INIT_SQL);
   await p.query(MIGRATE_AGENT_COLS);
+  await p.query(ORG_PROFILE_COLS);
   await p.query(AGENT_CRM_SQL);
   initDone = true;
 }

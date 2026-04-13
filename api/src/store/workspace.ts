@@ -1,5 +1,5 @@
 import { getPool, isDbConfigured, ensureTables } from "../db/index.js";
-import type { ConfigStore, ContaInstagram, ContaInstagramInput } from "./config.js";
+import type { ConfigStore, ContaInstagram, ContaInstagramInput, EmpresaPerfil } from "./config.js";
 
 function genAccountId(): string {
   return `conta-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -28,12 +28,37 @@ export async function userHasOrg(userId: string): Promise<{ orgId: string } | nu
 export async function loadWorkspaceConfigStore(orgId: string): Promise<ConfigStore> {
   await ensureTables();
   const pool = getPool();
-  const org = await pool.query<{ name: string; default_instagram_account_id: string | null }>(
-    "SELECT name, default_instagram_account_id FROM organizations WHERE id = $1",
+  const org = await pool.query<{
+    name: string;
+    default_instagram_account_id: string | null;
+    nome_fantasia: string;
+    segmento: string;
+    cidade: string;
+    tom_voz: string;
+    sobre: string;
+    objetivo_qualificacao: string;
+  }>(
+    `SELECT name, default_instagram_account_id,
+            COALESCE(nome_fantasia, '') AS nome_fantasia,
+            COALESCE(segmento, '') AS segmento,
+            COALESCE(cidade, '') AS cidade,
+            COALESCE(tom_voz, '') AS tom_voz,
+            COALESCE(sobre, '') AS sobre,
+            COALESCE(objetivo_qualificacao, '') AS objetivo_qualificacao
+     FROM organizations WHERE id = $1`,
     [orgId]
   );
   if (org.rows.length === 0) {
-    return { empresa: { nome: "" }, contas_instagram: [], instagram_default_id: null };
+    const empty: EmpresaPerfil = {
+      nome: "",
+      nome_fantasia: "",
+      segmento: "",
+      cidade: "",
+      tom_voz: "",
+      sobre: "",
+      objetivo_qualificacao: "",
+    };
+    return { empresa: empty, contas_instagram: [], instagram_default_id: null };
   }
   const acc = await pool.query<{
     id: string;
@@ -69,8 +94,18 @@ export async function loadWorkspaceConfigStore(orgId: string): Promise<ConfigSto
   let defaultId = org.rows[0].default_instagram_account_id;
   if (defaultId && !contas.some((c) => c.id === defaultId)) defaultId = contas[0]?.id ?? null;
   if (!defaultId && contas[0]) defaultId = contas[0].id;
+  const r = org.rows[0];
+  const empresa: EmpresaPerfil = {
+    nome: r.name,
+    nome_fantasia: r.nome_fantasia ?? "",
+    segmento: r.segmento ?? "",
+    cidade: r.cidade ?? "",
+    tom_voz: r.tom_voz ?? "",
+    sobre: r.sobre ?? "",
+    objetivo_qualificacao: r.objetivo_qualificacao ?? "",
+  };
   return {
-    empresa: { nome: org.rows[0].name },
+    empresa,
     contas_instagram: contas,
     instagram_default_id: defaultId,
   };
@@ -79,7 +114,7 @@ export async function loadWorkspaceConfigStore(orgId: string): Promise<ConfigSto
 export async function saveWorkspaceConfig(
   orgId: string,
   partial: {
-    empresa?: { nome?: string };
+    empresa?: Partial<EmpresaPerfil>;
     contas_instagram?: ContaInstagramInput[];
     instagram_default_id?: string | null;
   }
@@ -95,8 +130,24 @@ export async function saveWorkspaceConfig(
       throw new Error("Organização não encontrada.");
     }
 
-    if (partial.empresa?.nome !== undefined) {
-      await client.query("UPDATE organizations SET name = $2 WHERE id = $1", [orgId, partial.empresa.nome.trim() || "Empresa"]);
+    if (partial.empresa) {
+      const e = partial.empresa;
+      const sets: { col: string; val: string }[] = [];
+      if (e.nome !== undefined) sets.push({ col: "name", val: e.nome.trim() || "Empresa" });
+      if (e.nome_fantasia !== undefined) sets.push({ col: "nome_fantasia", val: (e.nome_fantasia ?? "").trim() });
+      if (e.segmento !== undefined) sets.push({ col: "segmento", val: (e.segmento ?? "").trim() });
+      if (e.cidade !== undefined) sets.push({ col: "cidade", val: (e.cidade ?? "").trim() });
+      if (e.tom_voz !== undefined) sets.push({ col: "tom_voz", val: (e.tom_voz ?? "").trim() });
+      if (e.sobre !== undefined) sets.push({ col: "sobre", val: (e.sobre ?? "").trim() });
+      if (e.objetivo_qualificacao !== undefined)
+        sets.push({ col: "objetivo_qualificacao", val: (e.objetivo_qualificacao ?? "").trim() });
+      if (sets.length > 0) {
+        const placeholders = sets.map((s, idx) => `${s.col} = $${idx + 1}`).join(", ");
+        await client.query(`UPDATE organizations SET ${placeholders} WHERE id = $${sets.length + 1}`, [
+          ...sets.map((s) => s.val),
+          orgId,
+        ]);
+      }
     }
 
     const currentRows = await client.query<{
