@@ -8,6 +8,13 @@ Uso:
 
 Exige nós com os mesmos nomes do workflow de referência (GravaComentario, DadosPost, …).
 Se renomeou nós, avise ou readicione os nomes no script.
+
+No workflow Agente-Postador.json, o nó HTTP **API** deve apontar para o backend:
+  • Variável de ambiente no n8n: INSTAGRAM_AGENT_API_BASE = URL sem barra final (ex.: https://api.seudominio.com)
+  • INTERNAL_AGENT_API_SECRET = mesmo valor de INTERNAL_AGENT_API_SECRET da API (EasyPanel / .env)
+
+Banco zerado: subir a API primeiro (ensureTables cria o schema). Cadastrar organização + conta Instagram no painel
+antes de receber webhooks; senão GET /api/internal/agent-config e INSERTs que usam instagram_accounts falham.
 """
 import argparse
 import json
