@@ -321,10 +321,20 @@ export function AdminPage() {
                 placeholder={editId === "new" ? "Token de publicação Graph API (obrigatório)" : "Token postagem (vazio = manter)"}
               />
               <p className="text-xs text-gray-500 font-medium pt-1">Agente Instagram (Direct / comentários)</p>
+              <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                <p className="font-semibold">Importante — painel ≠ n8n automaticamente</p>
+                <p className="mt-1 leading-relaxed">
+                  Salvar tokens e prompts aqui grava na <strong>API / banco</strong>. O workflow do n8n <strong>não muda sozinho</strong> e{" "}
+                  <strong>não lê esta tela</strong>. Para o Instagram usar estes prompts, o fluxo precisa, no início, chamar{" "}
+                  <code className="rounded bg-amber-100/80 px-1">GET /api/internal/agent-config?ig_user_id=…</code> (header{" "}
+                  <code className="rounded bg-amber-100/80 px-1">X-Internal-Secret</code>) e injetar{" "}
+                  <code className="rounded bg-amber-100/80 px-1">agent_prompt_comentarios</code> e{" "}
+                  <code className="rounded bg-amber-100/80 px-1">agent_prompt_direct</code> nos agentes. Sem isso, o n8n segue com texto fixo no fluxo.
+                </p>
+              </div>
               <p className="text-xs text-gray-500 mb-1">
-                Token separado do de publicação. Use o token com permissões de mensagens conforme o app Meta. No n8n, busque a config com{" "}
-                <code className="bg-gray-200 px-1 rounded">GET /api/internal/agent-config</code> e o header{" "}
-                <code className="bg-gray-200 px-1 rounded">X-Internal-Secret</code>.
+                Token separado do de publicação. Use o token com permissões de mensagens conforme o app Meta. Variável na API:{" "}
+                <code className="bg-gray-200 px-1 rounded">INTERNAL_AGENT_API_SECRET</code> (mesmo valor do header no n8n).
               </p>
               <input
                 type="password"
