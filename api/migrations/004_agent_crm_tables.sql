@@ -1,94 +1,13 @@
-import pg from "pg";
+-- CRM do agente Instagram: mesmas entidades do workflow n8n (postagens, comentarios, direct, leads),
+-- com escopo por organização (multi-tenant). Mesmo DATABASE_URL da API.
+-- Aplicado via ensureTables() na subida da API (SQL espelhado em api/src/db/index.ts).
+--
+-- Migração a partir de banco antigo só-n8n (tabelas sem organization_id):
+-- faça backup, remova ou renomeie as tabelas antigas com o mesmo nome, depois suba a API
+-- para recriar o schema multi-tenant; em seguida aponte o n8n para este DATABASE_URL
+-- e ajuste INSERT/SELECT para incluir organization_id (ex.: vindo do GET /api/internal/agent-config).
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "";
-
-let pool: pg.Pool | null = null;
-
-export function getPool(): pg.Pool {
-  if (!DATABASE_URL.trim()) {
-    throw new Error("DATABASE_URL não configurada");
-  }
-  if (!pool) {
-    pool = new pg.Pool({ connectionString: DATABASE_URL });
-  }
-  return pool;
-}
-
-export function isDbConfigured(): boolean {
-  return Boolean(DATABASE_URL?.trim());
-}
-
-const INIT_SQL = `
-CREATE TABLE IF NOT EXISTS app_config (
-  key text PRIMARY KEY,
-  value jsonb NOT NULL DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS postador_cronograma (
-  id text PRIMARY KEY,
-  caption text NOT NULL,
-  media_url text,
-  media_type text,
-  id_container text,
-  link_post text,
-  data_post text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS postador_agendados (
-  id text PRIMARY KEY,
-  caption text NOT NULL,
-  media_url text,
-  media_urls jsonb,
-  media_type text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS organizations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  default_instagram_account_id text NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS users (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text NOT NULL UNIQUE,
-  password_hash text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS org_members (
-  organization_id uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-  role text NOT NULL DEFAULT 'owner',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (organization_id, user_id)
-);
-
-CREATE TABLE IF NOT EXISTS instagram_accounts (
-  id text PRIMARY KEY,
-  organization_id uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-  nome text NOT NULL,
-  ig_user_id text NOT NULL,
-  access_token text NOT NULL DEFAULT '',
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_instagram_accounts_org ON instagram_accounts (organization_id);
-`;
-
-const MIGRATE_AGENT_COLS = `
-ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_access_token text NOT NULL DEFAULT '';
-ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_ativo boolean NOT NULL DEFAULT false;
-ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_nome text NOT NULL DEFAULT '';
-ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_prompt_comentarios text NOT NULL DEFAULT '';
-ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_prompt_direct text NOT NULL DEFAULT '';
-`;
-
-/** CRM do agente (postagens, comentarios, direct, leads) — mesmo banco da API, escopo por organization_id.
- * Espelha api/migrations/004_agent_crm_tables.sql (deploy só inclui dist; SQL duplicado aqui). */
-const AGENT_CRM_SQL = `
+-- Postagens (cache de mídia / legenda para contexto da IA)
 CREATE TABLE IF NOT EXISTS postagens (
   id                SERIAL PRIMARY KEY,
   organization_id   uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -108,9 +27,11 @@ CREATE TABLE IF NOT EXISTS postagens (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT postagens_org_id_post_key UNIQUE (organization_id, id_post)
 );
+
 CREATE INDEX IF NOT EXISTS idx_postagens_org ON postagens (organization_id);
 CREATE INDEX IF NOT EXISTS idx_postagens_created_at ON postagens (created_at DESC);
 
+-- Comentários recebidos via webhook
 CREATE TABLE IF NOT EXISTS comentarios (
   id                         SERIAL PRIMARY KEY,
   organization_id            uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -128,11 +49,13 @@ CREATE TABLE IF NOT EXISTS comentarios (
   id_direct_resposta_privada VARCHAR(255),
   CONSTRAINT comentarios_org_comment_key UNIQUE (organization_id, id_comentario)
 );
+
 CREATE INDEX IF NOT EXISTS idx_comentarios_org ON comentarios (organization_id);
 CREATE INDEX IF NOT EXISTS idx_comentarios_data ON comentarios (data_comentario DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_comentarios_postagem ON comentarios (id_postagem);
 CREATE INDEX IF NOT EXISTS idx_comentarios_lead ON comentarios (id_insta_lead);
 
+-- Mensagens Direct (webhook + private reply enviada pelo negócio)
 CREATE TABLE IF NOT EXISTS direct (
   id                      SERIAL PRIMARY KEY,
   organization_id         uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -149,10 +72,12 @@ CREATE TABLE IF NOT EXISTS direct (
   enviado_pelo_negocio    BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT direct_org_message_key UNIQUE (organization_id, id_direct)
 );
+
 CREATE INDEX IF NOT EXISTS idx_direct_org ON direct (organization_id);
 CREATE INDEX IF NOT EXISTS idx_direct_lead ON direct (id_insta_lead);
 CREATE INDEX IF NOT EXISTS idx_direct_data ON direct (data_direct DESC NULLS LAST);
 
+-- Leads (identidade / WhatsApp / objetivo) — mesmo IG pode ser lead em orgs diferentes
 CREATE TABLE IF NOT EXISTS leads (
   id                         SERIAL PRIMARY KEY,
   organization_id            uuid NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
@@ -169,17 +94,11 @@ CREATE TABLE IF NOT EXISTS leads (
   updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT leads_org_instagram_key UNIQUE (organization_id, id_instagram)
 );
+
 CREATE INDEX IF NOT EXISTS idx_leads_org ON leads (organization_id);
 CREATE INDEX IF NOT EXISTS idx_leads_updated ON leads (updated_at DESC);
-`;
 
-let initDone = false;
-
-export async function ensureTables(): Promise<void> {
-  if (!isDbConfigured() || initDone) return;
-  const p = getPool();
-  await p.query(INIT_SQL);
-  await p.query(MIGRATE_AGENT_COLS);
-  await p.query(AGENT_CRM_SQL);
-  initDone = true;
-}
+COMMENT ON TABLE postagens IS 'Posts Instagram (Meta) por organização; contexto para agente.';
+COMMENT ON TABLE comentarios IS 'Comentários Instagram por organização.';
+COMMENT ON TABLE direct IS 'DM Instagram por organização.';
+COMMENT ON TABLE leads IS 'Leads por organização; id_instagram escopado por organization_id.';
