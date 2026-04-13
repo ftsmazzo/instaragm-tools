@@ -156,7 +156,12 @@ export type ContaInstagramInput = {
   agent_prompt_direct?: string;
 };
 
-export async function saveConfig(config: Partial<Omit<ConfigStore, "contas_instagram">> & { contas_instagram?: ContaInstagramInput[] }): Promise<ConfigStore> {
+export async function saveConfig(
+  config: Partial<Omit<ConfigStore, "empresa" | "contas_instagram">> & {
+    empresa?: Partial<EmpresaPerfil>;
+    contas_instagram?: ContaInstagramInput[];
+  }
+): Promise<ConfigStore> {
   const current = await loadConfig();
   let contas = current.contas_instagram;
   let defaultId = current.instagram_default_id;
