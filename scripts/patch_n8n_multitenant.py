@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Atualiza Agente-Instagram ImobMiq.json para schema CRM multi-tenant (004_agent_crm_tables.sql)."""
+"""Atualiza workflow n8n exportado (JSON) para schema CRM multi-tenant (api/migrations/004_agent_crm_tables.sql).
+
+Uso:
+  python scripts/patch_n8n_multitenant.py
+  python scripts/patch_n8n_multitenant.py caminho/seu-workflow.json
+  python scripts/patch_n8n_multitenant.py entrada.json saida.json
+
+Exige nós com os mesmos nomes do workflow de referência (GravaComentario, DadosPost, …).
+Se renomeou nós, avise ou readicione os nomes no script.
+"""
+import argparse
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-WF = ROOT / "Agente-Instagram ImobMiq.json"
+DEFAULT_WF = ROOT / "Agente-Instagram ImobMiq.json"
 
 DDL_STUB = """-- Tabelas multi-tenant já criadas pela API (api/migrations/004_agent_crm_tables.sql).
 -- Não executar CREATE aqui em produção.
@@ -118,8 +129,9 @@ def find_node(nodes, name):
     raise KeyError(name)
 
 
-def patch():
-    data = json.loads(WF.read_text(encoding="utf-8"))
+def patch(input_path: Path, output_path: Path | None = None) -> None:
+    output_path = output_path or input_path
+    data = json.loads(input_path.read_text(encoding="utf-8"))
     nodes = data["nodes"]
 
     # GravaComentario
@@ -310,9 +322,35 @@ def patch():
         if isinstance(q, str) and "CREATE TABLE IF NOT EXISTS public.leads" in q:
             n["parameters"]["query"] = DDL_STUB
 
-    WF.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    print("OK:", WF)
+    output_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("OK:", output_path)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Adequa workflow n8n ao CRM multi-tenant.")
+    ap.add_argument(
+        "input",
+        nargs="?",
+        type=Path,
+        default=DEFAULT_WF,
+        help=f"JSON exportado do n8n (default: {DEFAULT_WF.name})",
+    )
+    ap.add_argument("output", nargs="?", type=Path, default=None, help="Arquivo de saída (default: sobrescreve entrada)")
+    args = ap.parse_args()
+    inp = args.input.resolve()
+    if not inp.is_file():
+        print(f"Arquivo não encontrado: {inp}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        patch(inp, args.output.resolve() if args.output else None)
+    except KeyError as e:
+        print(
+            f"Nó obrigatório ausente ou nome diferente: {e!s}. "
+            "Confira se o workflow usa os mesmos nomes de nó (ex.: GravaComentario, DadosPost).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
 
 if __name__ == "__main__":
-    patch()
+    main()
