@@ -302,6 +302,22 @@ export function AdminPage() {
     }));
   };
 
+  /** Substitui os dois textareas pelos padrões atuais do código (não lê outro lugar — é o que está em PROMPT_* nesta versão do painel). */
+  const aplicarPromptsPadraoAtuais = () => {
+    if (
+      !confirm(
+        "Substituir os dois prompts pelo padrão atual do sistema?\n\nIsso remove o texto antigo destes campos. Depois clique em Salvar alterações."
+      )
+    ) {
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      agent_prompt_comentarios: PROMPT_COMENTARIOS_PADRAO,
+      agent_prompt_direct: PROMPT_DIRECT_PADRAO,
+    }));
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -495,8 +511,14 @@ export function AdminPage() {
                 value={form.agent_nome}
                 onChange={(e) => setForm((f) => ({ ...f, agent_nome: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                placeholder="Nome do assistente (ex.: Equipe ImobMiq)"
+                placeholder="Nome do assistente (como a IA se apresenta)"
               />
+              <p className="text-xs text-gray-600 rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
+                <strong>O que aparece abaixo</strong> é o que está <strong>salvo no banco</strong> para esta conta. Atualizar o painel no deploy{" "}
+                <strong>não troca</strong> texto antigo sozinho. O CONTEXTO DA EMPRESA (dados acima + API) entra no n8n pelo{" "}
+                <code className="text-[11px] bg-white px-1 rounded border">agent-config</code>; estes campos são as{" "}
+                <strong>instruções fixas</strong> do agente. Para usar os padrões novos do sistema, clique em &quot;Substituir pelos padrões atuais&quot;.
+              </p>
               <textarea
                 value={form.agent_prompt_comentarios}
                 onChange={(e) => setForm((f) => ({ ...f, agent_prompt_comentarios: e.target.value }))}
@@ -509,13 +531,22 @@ export function AdminPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[88px]"
                 placeholder="Prompt para mensagens diretas"
               />
-              <button
-                type="button"
-                onClick={aplicarGerarAgente}
-                className="w-full px-3 py-2 border border-emerald-600 text-emerald-700 rounded-md text-sm font-medium hover:bg-emerald-50"
-              >
-                Gerar perfil de agente (prompts padrão + ativar)
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={aplicarPromptsPadraoAtuais}
+                  className="w-full px-3 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                >
+                  Substituir pelos padrões atuais (comentário + Direct)
+                </button>
+                <button
+                  type="button"
+                  onClick={aplicarGerarAgente}
+                  className="w-full px-3 py-2 border border-emerald-600 text-emerald-700 rounded-md text-sm font-medium hover:bg-emerald-50"
+                >
+                  Ativar agente + nome sugerido (só preenche prompt se estiver vazio)
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
