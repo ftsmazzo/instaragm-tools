@@ -1994,16 +1994,9 @@
     },
     {
       "parameters": {
-        "url": "={{ ($env.INSTAGRAM_AGENT_API_BASE || 'https://SUBSTITUA_PELO_SEU_BACKEND') + '/api/internal/agent-config?ig_user_id=' + $json.body.entry[0].id }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Internal-Secret",
-              "value": "={{ $env.INTERNAL_AGENT_API_SECRET }}"
-            }
-          ]
-        },
+        "url": "=https://SUBSTITUA_PELO_SEU_BACKEND/api/internal/agent-config?ig_user_id={{ $json.body.entry[0].id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

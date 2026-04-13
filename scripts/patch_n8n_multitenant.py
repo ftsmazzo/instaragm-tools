@@ -9,9 +9,10 @@ Uso:
 Exige nós com os mesmos nomes do workflow de referência (GravaComentario, DadosPost, …).
 Se renomeou nós, avise ou readicione os nomes no script.
 
-No workflow Agente-Postador.json, o nó HTTP **API** deve apontar para o backend:
-  • Variável de ambiente no n8n: INSTAGRAM_AGENT_API_BASE = URL sem barra final (ex.: https://api.seudominio.com)
-  • INTERNAL_AGENT_API_SECRET = mesmo valor de INTERNAL_AGENT_API_SECRET da API (EasyPanel / .env)
+No workflow Agente-Postador.json, o nó HTTP **API**:
+  • URL no próprio nó: troque SUBSTITUA_PELO_SEU_BACKEND pela URL da API (sem barra antes de /api).
+  • Autenticação: Generic > Header Auth — crie credencial "Header Auth" com nome do header
+    X-Internal-Secret e valor = INTERNAL_AGENT_API_SECRET da API (não use $env se N8N_BLOCK_ENV_ACCESS_IN_NODE estiver ativo).
 
 Banco zerado: subir a API primeiro (ensureTables cria o schema). Cadastrar organização + conta Instagram no painel
 antes de receber webhooks; senão GET /api/internal/agent-config e INSERTs que usam instagram_accounts falham.
