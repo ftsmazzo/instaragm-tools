@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { createReadStream } from "fs";
 import { stat } from "fs/promises";
 import { join } from "path";
@@ -9,7 +9,8 @@ import { publishToInstagram, publishCarouselToInstagram } from "../services/inst
 import { gerarImagemComIA } from "../services/imageGen.js";
 import { adicionarTextoCarrossel } from "../services/carouselTexto.js";
 import { getContaParaPublicar } from "../store/config.js";
-import { resolveConfigStore } from "../context/workspaceConfig.js";
+import { resolveConfigStore, getOrgIdFromRequest } from "../context/workspaceConfig.js";
+import { upsertPostagemFromPostador } from "../store/crmPostagens.js";
 import { appendCronograma, listCronograma } from "../store/cronograma.js";
 import { listAgendados, addAgendado, getAgendado, deleteAgendado } from "../store/agendados.js";
 
@@ -26,6 +27,36 @@ function extFromMimetype(mimetype: string): string {
 }
 
 const SAFE_FILENAME = /^[a-zA-Z0-9._-]+$/;
+
+async function recordCrmPostagemAposPublicar(
+  fastify: FastifyInstance,
+  orgId: string | null,
+  creds: { contaId: string },
+  p: {
+    id_media: string;
+    caption: string;
+    media_type: string | null;
+    media_url: string | null;
+    link_post: string | null;
+    data_post: string;
+  }
+): Promise<void> {
+  if (!orgId) return;
+  try {
+    await upsertPostagemFromPostador({
+      organizationId: orgId,
+      instagramAccountId: creds.contaId,
+      idPost: p.id_media,
+      caption: p.caption,
+      mediaType: p.media_type,
+      mediaUrl: p.media_url,
+      linkPost: p.link_post,
+      dataPost: p.data_post,
+    });
+  } catch (err) {
+    fastify.log.error({ err }, "crm postagens após publicar");
+  }
+}
 
 /**
  * Postador: IA no backend, armazenamento (Cloudinary / local / MinIO), Graph API para publicar.
@@ -129,6 +160,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
     const { token, igUserId } = creds;
+    const orgId = await getOrgIdFromRequest(fastify, request);
 
     try {
       if (agendado.media_type === "CAROUSEL" && agendado.media_urls?.length) {
@@ -139,6 +171,14 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
           media_url: null,
           media_type: "CAROUSEL",
           id_container: result.id_container,
+          link_post: result.link_post,
+          data_post: dataPost,
+        });
+        await recordCrmPostagemAposPublicar(fastify, orgId, creds, {
+          id_media: result.id_media,
+          caption: agendado.caption,
+          media_type: "CAROUSEL",
+          media_url: agendado.media_urls[0] ?? null,
           link_post: result.link_post,
           data_post: dataPost,
         });
@@ -156,6 +196,14 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
         media_url: mediaUrl,
         media_type: agendado.media_type,
         id_container: result.id_container,
+        link_post: result.link_post,
+        data_post: dataPost,
+      });
+      await recordCrmPostagemAposPublicar(fastify, orgId, creds, {
+        id_media: result.id_media,
+        caption: agendado.caption,
+        media_type: agendado.media_type,
+        media_url: mediaUrl,
         link_post: result.link_post,
         data_post: dataPost,
       });
@@ -468,6 +516,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
     const { token, igUserId } = creds;
+    const orgId = await getOrgIdFromRequest(fastify, request);
 
     try {
       if (isCarousel) {
@@ -478,6 +527,14 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
           media_url: null,
           media_type: "CAROUSEL",
           id_container: result.id_container,
+          link_post: result.link_post,
+          data_post: dataPost,
+        });
+        await recordCrmPostagemAposPublicar(fastify, orgId, creds, {
+          id_media: result.id_media,
+          caption,
+          media_type: "CAROUSEL",
+          media_url: mediaUrls[0] ?? null,
           link_post: result.link_post,
           data_post: dataPost,
         });
@@ -496,6 +553,14 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
         media_url: mediaUrl!,
         media_type: mediaType,
         id_container: result.id_container,
+        link_post: result.link_post,
+        data_post: dataPost,
+      });
+      await recordCrmPostagemAposPublicar(fastify, orgId, creds, {
+        id_media: result.id_media,
+        caption,
+        media_type: mediaType,
+        media_url: mediaUrl!,
         link_post: result.link_post,
         data_post: dataPost,
       });

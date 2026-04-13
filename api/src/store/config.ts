@@ -113,14 +113,17 @@ export async function loadConfig(): Promise<ConfigStore> {
   return loadFromFile();
 }
 
-/** Retorna token e ig_user_id da conta a usar (conta_id ou padrão). Para uso interno ao publicar. */
-export function getContaParaPublicar(config: ConfigStore, contaId?: string | null): { token: string; igUserId: string } | null {
+/** Retorna token, ig_user_id e id interno da conta (conta_id ou padrão). Para uso interno ao publicar. */
+export function getContaParaPublicar(
+  config: ConfigStore,
+  contaId?: string | null
+): { token: string; igUserId: string; contaId: string } | null {
   const id = (contaId ?? config.instagram_default_id)?.trim();
   const conta = id
     ? config.contas_instagram.find((c) => c.id === id)
     : config.contas_instagram[0];
   if (!conta?.access_token?.trim() || !conta?.ig_user_id?.trim()) return null;
-  return { token: conta.access_token.trim(), igUserId: conta.ig_user_id.trim() };
+  return { token: conta.access_token.trim(), igUserId: conta.ig_user_id.trim(), contaId: conta.id };
 }
 
 async function saveToFile(config: ConfigStore): Promise<ConfigStore> {
