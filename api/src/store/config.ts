@@ -10,6 +10,13 @@ export type ContaInstagram = {
   nome: string;
   access_token: string;
   ig_user_id: string;
+  /** Token para agente (Direct/comentários); separado do token de publicação. */
+  agent_access_token?: string;
+  agent_ativo?: boolean;
+  /** Nome do assistente exibido nas respostas. */
+  agent_nome?: string;
+  agent_prompt_comentarios?: string;
+  agent_prompt_direct?: string;
 };
 
 export type ConfigStore = {
@@ -119,6 +126,11 @@ export type ContaInstagramInput = {
   nome: string;
   ig_user_id: string;
   access_token?: string; // se vazio, mantém o existente
+  agent_access_token?: string;
+  agent_ativo?: boolean;
+  agent_nome?: string;
+  agent_prompt_comentarios?: string;
+  agent_prompt_direct?: string;
 };
 
 export async function saveConfig(config: Partial<Omit<ConfigStore, "contas_instagram">> & { contas_instagram?: ContaInstagramInput[] }): Promise<ConfigStore> {
@@ -131,11 +143,17 @@ export async function saveConfig(config: Partial<Omit<ConfigStore, "contas_insta
     contas = input.map((c) => {
       const existing = c.id ? contas.find((x) => x.id === c.id) : null;
       const token = (c.access_token?.trim() || existing?.access_token) ?? "";
+      const agentTok = (c.agent_access_token?.trim() || existing?.agent_access_token) ?? "";
       return {
         id: c.id ?? genContaId(),
         nome: (c.nome ?? existing?.nome ?? "").trim() || "Conta",
         ig_user_id: (c.ig_user_id ?? existing?.ig_user_id ?? "").trim(),
         access_token: token,
+        agent_access_token: agentTok,
+        agent_ativo: c.agent_ativo ?? existing?.agent_ativo ?? false,
+        agent_nome: (c.agent_nome ?? existing?.agent_nome ?? "").trim(),
+        agent_prompt_comentarios: (c.agent_prompt_comentarios ?? existing?.agent_prompt_comentarios ?? "").trim(),
+        agent_prompt_direct: (c.agent_prompt_direct ?? existing?.agent_prompt_direct ?? "").trim(),
       };
     });
   }

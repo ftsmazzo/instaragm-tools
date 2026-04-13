@@ -40,8 +40,19 @@ export async function loadWorkspaceConfigStore(orgId: string): Promise<ConfigSto
     nome: string;
     ig_user_id: string;
     access_token: string;
+    agent_access_token: string;
+    agent_ativo: boolean;
+    agent_nome: string;
+    agent_prompt_comentarios: string;
+    agent_prompt_direct: string;
   }>(
-    "SELECT id, nome, ig_user_id, access_token FROM instagram_accounts WHERE organization_id = $1 ORDER BY created_at",
+    `SELECT id, nome, ig_user_id, access_token,
+            COALESCE(agent_access_token, '') AS agent_access_token,
+            COALESCE(agent_ativo, false) AS agent_ativo,
+            COALESCE(agent_nome, '') AS agent_nome,
+            COALESCE(agent_prompt_comentarios, '') AS agent_prompt_comentarios,
+            COALESCE(agent_prompt_direct, '') AS agent_prompt_direct
+     FROM instagram_accounts WHERE organization_id = $1 ORDER BY created_at`,
     [orgId]
   );
   const contas: ContaInstagram[] = acc.rows.map((r) => ({
@@ -49,6 +60,11 @@ export async function loadWorkspaceConfigStore(orgId: string): Promise<ConfigSto
     nome: r.nome,
     ig_user_id: r.ig_user_id,
     access_token: r.access_token ?? "",
+    agent_access_token: r.agent_access_token ?? "",
+    agent_ativo: r.agent_ativo ?? false,
+    agent_nome: r.agent_nome ?? "",
+    agent_prompt_comentarios: r.agent_prompt_comentarios ?? "",
+    agent_prompt_direct: r.agent_prompt_direct ?? "",
   }));
   let defaultId = org.rows[0].default_instagram_account_id;
   if (defaultId && !contas.some((c) => c.id === defaultId)) defaultId = contas[0]?.id ?? null;
@@ -83,11 +99,45 @@ export async function saveWorkspaceConfig(
       await client.query("UPDATE organizations SET name = $2 WHERE id = $1", [orgId, partial.empresa.nome.trim() || "Empresa"]);
     }
 
-    const currentRows = await client.query<{ id: string; access_token: string }>(
-      "SELECT id, access_token FROM instagram_accounts WHERE organization_id = $1",
+    const currentRows = await client.query<{
+      id: string;
+      access_token: string;
+      agent_access_token: string;
+      agent_ativo: boolean;
+      agent_nome: string;
+      agent_prompt_comentarios: string;
+      agent_prompt_direct: string;
+    }>(
+      `SELECT id, access_token,
+              COALESCE(agent_access_token, '') AS agent_access_token,
+              COALESCE(agent_ativo, false) AS agent_ativo,
+              COALESCE(agent_nome, '') AS agent_nome,
+              COALESCE(agent_prompt_comentarios, '') AS agent_prompt_comentarios,
+              COALESCE(agent_prompt_direct, '') AS agent_prompt_direct
+       FROM instagram_accounts WHERE organization_id = $1`,
       [orgId]
     );
-    const existingById = new Map(currentRows.rows.map((r) => [r.id, r.access_token]));
+    type ExistingAcc = {
+      access_token: string;
+      agent_access_token: string;
+      agent_ativo: boolean;
+      agent_nome: string;
+      agent_prompt_comentarios: string;
+      agent_prompt_direct: string;
+    };
+    const existingById = new Map<string, ExistingAcc>(
+      currentRows.rows.map((r) => [
+        r.id,
+        {
+          access_token: r.access_token,
+          agent_access_token: r.agent_access_token,
+          agent_ativo: r.agent_ativo,
+          agent_nome: r.agent_nome,
+          agent_prompt_comentarios: r.agent_prompt_comentarios,
+          agent_prompt_direct: r.agent_prompt_direct,
+        },
+      ])
+    );
 
     if (partial.contas_instagram) {
       const input = partial.contas_instagram;
@@ -104,23 +154,53 @@ export async function saveWorkspaceConfig(
           }
         }
         nextIds.add(id);
-        const existingToken = existingById.get(id);
-        const token = (c.access_token?.trim() || existingToken) ?? "";
+        const existing = existingById.get(id);
+        const token = (c.access_token?.trim() || existing?.access_token) ?? "";
+        const agentTok = (c.agent_access_token?.trim() || existing?.agent_access_token) ?? "";
         const nome = (c.nome ?? "").trim() || "Conta";
         const igUser = (c.ig_user_id ?? "").trim();
+        const isUpdate = existing !== undefined;
+        const agentAtivo = isUpdate
+          ? c.agent_ativo !== undefined
+            ? Boolean(c.agent_ativo)
+            : existing.agent_ativo
+          : Boolean(c.agent_ativo);
+        const agentNome = isUpdate
+          ? c.agent_nome !== undefined
+            ? (c.agent_nome ?? "").trim()
+            : existing.agent_nome
+          : (c.agent_nome ?? "").trim();
+        const pCom = isUpdate
+          ? c.agent_prompt_comentarios !== undefined
+            ? (c.agent_prompt_comentarios ?? "").trim()
+            : existing.agent_prompt_comentarios
+          : (c.agent_prompt_comentarios ?? "").trim();
+        const pDir = isUpdate
+          ? c.agent_prompt_direct !== undefined
+            ? (c.agent_prompt_direct ?? "").trim()
+            : existing.agent_prompt_direct
+          : (c.agent_prompt_direct ?? "").trim();
         const own = await client.query("SELECT 1 FROM instagram_accounts WHERE id = $1 AND organization_id = $2", [id, orgId]);
         if (own.rows.length > 0) {
           await client.query(
-            `UPDATE instagram_accounts SET nome = $3, ig_user_id = $4,
-             access_token = CASE WHEN $5 <> '' THEN $5 ELSE access_token END
+            `UPDATE instagram_accounts SET
+               nome = $3, ig_user_id = $4,
+               access_token = CASE WHEN $5 <> '' THEN $5 ELSE access_token END,
+               agent_access_token = CASE WHEN $6 <> '' THEN $6 ELSE agent_access_token END,
+               agent_ativo = $7,
+               agent_nome = $8,
+               agent_prompt_comentarios = $9,
+               agent_prompt_direct = $10
              WHERE id = $1 AND organization_id = $2`,
-            [id, orgId, nome, igUser, token]
+            [id, orgId, nome, igUser, token, agentTok, agentAtivo, agentNome, pCom, pDir]
           );
         } else {
           await client.query(
-            `INSERT INTO instagram_accounts (id, organization_id, nome, ig_user_id, access_token)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [id, orgId, nome, igUser, token]
+            `INSERT INTO instagram_accounts (
+               id, organization_id, nome, ig_user_id, access_token,
+               agent_access_token, agent_ativo, agent_nome, agent_prompt_comentarios, agent_prompt_direct
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [id, orgId, nome, igUser, token, agentTok, agentAtivo, agentNome, pCom, pDir]
           );
         }
       }

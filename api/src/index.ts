@@ -10,6 +10,7 @@ import { agentesRoutes } from "./routes/agentes.js";
 import { postadorRoutes } from "./routes/postador.js";
 import { authRoutes } from "./routes/auth.js";
 import { meWorkspaceRoutes } from "./routes/meWorkspace.js";
+import { internalAgentRoutes } from "./routes/internalAgent.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
@@ -26,6 +27,7 @@ async function build() {
   await app.register(healthRoutes, { prefix: "/" });
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(meWorkspaceRoutes, { prefix: "/api/me" });
+  await app.register(internalAgentRoutes, { prefix: "/api/internal" });
   await app.register(configRoutes, { prefix: "/api/config" });
   await app.register(postagensRoutes, { prefix: "/api/postagens" });
   await app.register(agentesRoutes, { prefix: "/api/agentes" });

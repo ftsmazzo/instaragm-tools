@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import { loadConfig, saveConfig, type ContaInstagramInput } from "../store/config.js";
+import { toContaInstagramPublic } from "../util/instagramPublic.js";
 
 export async function configRoutes(
   app: FastifyInstance,
@@ -8,12 +9,7 @@ export async function configRoutes(
   // GET – obter configuração (contas sem token; para o painel)
   app.get("/", async (_request, reply) => {
     const config = await loadConfig();
-    const contas = config.contas_instagram.map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      ig_user_id: c.ig_user_id,
-      has_token: Boolean(c.access_token?.trim()),
-    }));
+    const contas = config.contas_instagram.map(toContaInstagramPublic);
     return reply.send({
       empresa: config.empresa ?? { nome: "" },
       contas_instagram: contas,
@@ -57,12 +53,7 @@ export async function configRoutes(
       ];
     }
     const saved = await saveConfig(update);
-    const contas = saved.contas_instagram.map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      ig_user_id: c.ig_user_id,
-      has_token: Boolean(c.access_token?.trim()),
-    }));
+    const contas = saved.contas_instagram.map(toContaInstagramPublic);
     return reply.send({
       saved: true,
       received: {

@@ -78,11 +78,20 @@ CREATE TABLE IF NOT EXISTS instagram_accounts (
 CREATE INDEX IF NOT EXISTS idx_instagram_accounts_org ON instagram_accounts (organization_id);
 `;
 
+const MIGRATE_AGENT_COLS = `
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_access_token text NOT NULL DEFAULT '';
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_ativo boolean NOT NULL DEFAULT false;
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_nome text NOT NULL DEFAULT '';
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_prompt_comentarios text NOT NULL DEFAULT '';
+ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS agent_prompt_direct text NOT NULL DEFAULT '';
+`;
+
 let initDone = false;
 
 export async function ensureTables(): Promise<void> {
   if (!isDbConfigured() || initDone) return;
   const p = getPool();
   await p.query(INIT_SQL);
+  await p.query(MIGRATE_AGENT_COLS);
   initDone = true;
 }

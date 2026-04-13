@@ -9,6 +9,23 @@ import {
   type ContaInstagramInput,
 } from "../api/client";
 
+const PROMPT_COMENTARIOS_PADRAO = `Você responde comentários no Instagram em nome da empresa. Seja cordial, objetivo e profissional. Não prometa o que não pode cumprir. Para valores, visitas ou negociação, convide a pessoa a enviar mensagem direta.`;
+
+const PROMPT_DIRECT_PADRAO = `Você atende mensagens diretas no Instagram em nome da empresa. Ajude com informações e tire dúvidas com claro bom senso. Peça dados só quando necessário. Se não souber algo, diga que um consultor vai retornar em breve.`;
+
+function emptyContaForm() {
+  return {
+    nome: "",
+    ig_user_id: "",
+    access_token: "",
+    agent_access_token: "",
+    agent_ativo: false,
+    agent_nome: "",
+    agent_prompt_comentarios: "",
+    agent_prompt_direct: "",
+  };
+}
+
 export function AdminPage() {
   const [config, setConfig] = useState<Config | null>(null);
   const [loading, setLoading] = useState(true);
@@ -16,7 +33,7 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [nome, setNome] = useState("");
   const [editId, setEditId] = useState<string | "new" | null>(null);
-  const [form, setForm] = useState({ nome: "", ig_user_id: "", access_token: "" });
+  const [form, setForm] = useState(emptyContaForm);
   /** Dados vêm de /api/me/workspace (organização + contas no PostgreSQL). */
   const [useWorkspace, setUseWorkspace] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
@@ -109,10 +126,32 @@ export function AdminPage() {
     setError(null);
     const list: ContaInstagramInput[] =
       editId === "new"
-        ? [...contas.map((c) => ({ id: c.id, nome: c.nome, ig_user_id: c.ig_user_id })), { nome: form.nome.trim(), ig_user_id: form.ig_user_id.trim(), access_token: form.access_token.trim() || undefined }]
+        ? [
+            ...contas.map((c) => ({ id: c.id, nome: c.nome, ig_user_id: c.ig_user_id })),
+            {
+              nome: form.nome.trim(),
+              ig_user_id: form.ig_user_id.trim(),
+              access_token: form.access_token.trim() || undefined,
+              agent_access_token: form.agent_access_token.trim() || undefined,
+              agent_ativo: form.agent_ativo,
+              agent_nome: form.agent_nome.trim(),
+              agent_prompt_comentarios: form.agent_prompt_comentarios,
+              agent_prompt_direct: form.agent_prompt_direct,
+            },
+          ]
         : contas.map((c) =>
             c.id === editId
-              ? { id: c.id, nome: form.nome.trim(), ig_user_id: form.ig_user_id.trim(), access_token: form.access_token.trim() || undefined }
+              ? {
+                  id: c.id,
+                  nome: form.nome.trim(),
+                  ig_user_id: form.ig_user_id.trim(),
+                  access_token: form.access_token.trim() || undefined,
+                  agent_access_token: form.agent_access_token.trim() || undefined,
+                  agent_ativo: form.agent_ativo,
+                  agent_nome: form.agent_nome.trim(),
+                  agent_prompt_comentarios: form.agent_prompt_comentarios,
+                  agent_prompt_direct: form.agent_prompt_direct,
+                }
               : { id: c.id, nome: c.nome, ig_user_id: c.ig_user_id }
           );
     const p =
@@ -122,7 +161,7 @@ export function AdminPage() {
     p.then((res) => {
       setConfig((c) => (c ? { ...c, contas_instagram: res.received?.contas_instagram ?? c.contas_instagram } : null));
       setEditId(null);
-      setForm({ nome: "", ig_user_id: "", access_token: "" });
+      setForm(emptyContaForm());
     })
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao salvar"))
       .finally(() => setSaving(false));
@@ -149,7 +188,27 @@ export function AdminPage() {
 
   const startEdit = (conta: ContaInstagramRes) => {
     setEditId(conta.id);
-    setForm({ nome: conta.nome, ig_user_id: conta.ig_user_id, access_token: "" });
+    setForm({
+      nome: conta.nome,
+      ig_user_id: conta.ig_user_id,
+      access_token: "",
+      agent_access_token: "",
+      agent_ativo: conta.agent_ativo ?? false,
+      agent_nome: conta.agent_nome ?? "",
+      agent_prompt_comentarios: conta.agent_prompt_comentarios ?? "",
+      agent_prompt_direct: conta.agent_prompt_direct ?? "",
+    });
+  };
+
+  const aplicarGerarAgente = () => {
+    const nomeAssistente = (form.agent_nome.trim() || form.nome.trim() || nome.trim() || "Assistente").slice(0, 120);
+    setForm((f) => ({
+      ...f,
+      agent_ativo: true,
+      agent_nome: nomeAssistente,
+      agent_prompt_comentarios: f.agent_prompt_comentarios.trim() ? f.agent_prompt_comentarios : PROMPT_COMENTARIOS_PADRAO,
+      agent_prompt_direct: f.agent_prompt_direct.trim() ? f.agent_prompt_direct : PROMPT_DIRECT_PADRAO,
+    }));
   };
 
   if (loading) {
@@ -216,7 +275,9 @@ export function AdminPage() {
               <li key={c.id} className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <span className="font-medium text-gray-800">{c.nome || "Sem nome"}</span>
                 <span className="text-sm text-gray-500">({c.ig_user_id})</span>
-                {c.has_token && <span className="text-xs text-green-600">Token ok</span>}
+                {c.has_token && <span className="text-xs text-green-600">Token postagem</span>}
+                {c.has_agent_token && <span className="text-xs text-teal-700">Token agente</span>}
+                {c.agent_ativo && <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Agente ativo</span>}
                 {defaultId === c.id && <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">Padrão</span>}
                 <div className="ml-auto flex gap-2">
                   {defaultId !== c.id && (
@@ -257,8 +318,55 @@ export function AdminPage() {
                 value={form.access_token}
                 onChange={(e) => setForm((f) => ({ ...f, access_token: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
-                placeholder={editId === "new" ? "Token de acesso (obrigatório)" : "Token (deixe em branco para manter o atual)"}
+                placeholder={editId === "new" ? "Token de publicação Graph API (obrigatório)" : "Token postagem (vazio = manter)"}
               />
+              <p className="text-xs text-gray-500 font-medium pt-1">Agente Instagram (Direct / comentários)</p>
+              <p className="text-xs text-gray-500 mb-1">
+                Token separado do de publicação. Use o token com permissões de mensagens conforme o app Meta. No n8n, busque a config com{" "}
+                <code className="bg-gray-200 px-1 rounded">GET /api/internal/agent-config</code> e o header{" "}
+                <code className="bg-gray-200 px-1 rounded">X-Internal-Secret</code>.
+              </p>
+              <input
+                type="password"
+                value={form.agent_access_token}
+                onChange={(e) => setForm((f) => ({ ...f, agent_access_token: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+                placeholder={editId === "new" ? "Token do agente (opcional)" : "Token agente (vazio = manter)"}
+              />
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.agent_ativo}
+                  onChange={(e) => setForm((f) => ({ ...f, agent_ativo: e.target.checked }))}
+                />
+                Agente ativo (automação pode usar esta conta)
+              </label>
+              <input
+                type="text"
+                value={form.agent_nome}
+                onChange={(e) => setForm((f) => ({ ...f, agent_nome: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                placeholder="Nome do assistente (ex.: Equipe ImobMiq)"
+              />
+              <textarea
+                value={form.agent_prompt_comentarios}
+                onChange={(e) => setForm((f) => ({ ...f, agent_prompt_comentarios: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[88px]"
+                placeholder="Prompt para respostas em comentários"
+              />
+              <textarea
+                value={form.agent_prompt_direct}
+                onChange={(e) => setForm((f) => ({ ...f, agent_prompt_direct: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[88px]"
+                placeholder="Prompt para mensagens diretas"
+              />
+              <button
+                type="button"
+                onClick={aplicarGerarAgente}
+                className="w-full px-3 py-2 border border-emerald-600 text-emerald-700 rounded-md text-sm font-medium hover:bg-emerald-50"
+              >
+                Gerar perfil de agente (prompts padrão + ativar)
+              </button>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -272,7 +380,7 @@ export function AdminPage() {
                   type="button"
                   onClick={() => {
                     setEditId(null);
-                    setForm({ nome: "", ig_user_id: "", access_token: "" });
+                    setForm(emptyContaForm());
                   }}
                   className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
                 >
@@ -287,7 +395,7 @@ export function AdminPage() {
               type="button"
               onClick={() => {
                 setEditId("new");
-                setForm({ nome: "", ig_user_id: "", access_token: "" });
+                setForm(emptyContaForm());
               }}
               className="px-4 py-2 border border-indigo-600 text-indigo-600 rounded-md hover:bg-indigo-50 text-sm font-medium"
             >

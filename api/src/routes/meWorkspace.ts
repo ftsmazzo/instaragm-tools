@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginOptions } from "fastify";
 import { isDbConfigured } from "../db/index.js";
 import { loadWorkspaceConfigStore, saveWorkspaceConfig } from "../store/workspace.js";
 import type { ContaInstagramInput } from "../store/config.js";
+import { toContaInstagramPublic } from "../util/instagramPublic.js";
 
 export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPluginOptions) {
   app.addHook("preHandler", async (request, reply) => {
@@ -18,12 +19,7 @@ export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPlug
   app.get("/workspace", async (request, reply) => {
     const u = request.user as { orgId: string };
     const config = await loadWorkspaceConfigStore(u.orgId);
-    const contas = config.contas_instagram.map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      ig_user_id: c.ig_user_id,
-      has_token: Boolean(c.access_token?.trim()),
-    }));
+    const contas = config.contas_instagram.map(toContaInstagramPublic);
     return reply.send({
       empresa: config.empresa ?? { nome: "" },
       contas_instagram: contas,
@@ -53,12 +49,7 @@ export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPlug
     }
     try {
       const saved = await saveWorkspaceConfig(u.orgId, update);
-      const contas = saved.contas_instagram.map((c) => ({
-        id: c.id,
-        nome: c.nome,
-        ig_user_id: c.ig_user_id,
-        has_token: Boolean(c.access_token?.trim()),
-      }));
+      const contas = saved.contas_instagram.map(toContaInstagramPublic);
       return reply.send({
         saved: true,
         received: {
