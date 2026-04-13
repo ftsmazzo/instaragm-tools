@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { api, type AgendadoItem, type ContaInstagramRes } from "../api/client";
+import { api, getAuthToken, type AgendadoItem, type ContaInstagramRes, type Config } from "../api/client";
 
 const STORAGE_KEY = "postador_ia";
 
@@ -103,13 +103,31 @@ export function Postador() {
   }, [previewUrls.length]);
 
   useEffect(() => {
-    api.getConfig().then((c) => {
+    const applyConfig = (c: Config) => {
       const contas = c.contas_instagram ?? [];
       setContasInstagram(contas);
       const defaultId = c.instagram_default_id ?? contas[0]?.id ?? null;
       setContaPadraoId(defaultId);
       setContaSelecionadaId((prev) => (prev && contas.some((x) => x.id === prev)) ? prev : defaultId);
-    }).catch(() => {});
+    };
+    (async () => {
+      try {
+        const status = await api.getAuthStatus();
+        if (status.database && status.authMode === "workspace" && getAuthToken()) {
+          const c = await api.getMeWorkspace();
+          applyConfig(c);
+          return;
+        }
+      } catch {
+        /* segue para legado */
+      }
+      try {
+        const c = await api.getConfig();
+        applyConfig(c);
+      } catch {
+        /* ignore */
+      }
+    })();
   }, []);
 
   const handleGerarCaption = async () => {

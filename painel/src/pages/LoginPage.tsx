@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { api, setAuthToken, type AuthStatus } from "../api/client";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { api, clearAuthToken, getAuthToken, setAuthToken, type AuthStatus } from "../api/client";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -22,19 +24,33 @@ export function LoginPage() {
       .catch(() => setStatus({ database: false, hasUsers: false, allowRegister: false }));
   }, []);
 
+  /** Já logado: não ficar preso na tela de login. */
+  useEffect(() => {
+    if (!getAuthToken()) return;
+    api
+      .getMe()
+      .then(() => {
+        const dest = from && from !== "/login" ? from : "/";
+        navigate(dest, { replace: true });
+      })
+      .catch(() => clearAuthToken());
+  }, [from, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
+      const dest =
+        from && from !== "/login" ? from : "/";
       if (mode === "register") {
         const r = await api.register(email.trim(), password, organizationName.trim() || "Minha empresa");
         setAuthToken(r.token);
-        navigate("/admin", { replace: true });
+        navigate(dest, { replace: true });
       } else {
         const r = await api.login(email.trim(), password);
         setAuthToken(r.token);
-        navigate("/admin", { replace: true });
+        navigate(dest, { replace: true });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha na autenticação");

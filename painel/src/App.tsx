@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
+import { RequireSession } from "./components/auth/RequireSession";
 import { HomePage } from "./pages/HomePage";
 import { AdminPage } from "./pages/AdminPage";
 import { PostagensPage } from "./pages/PostagensPage";
@@ -15,14 +16,16 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/postagens" element={<PostagensPage />} />
-        <Route path="/agentes" element={<AgentesPage />} />
-        <Route path="/postador" element={<Postador />} />
-        <Route path="/cronograma" element={<CronogramaPage />} />
-        <Route path="/perfil" element={<PerfilPage />} />
-        <Route path="/whatsapp" element={<WhatsAppPage />} />
+        <Route element={<RequireSession />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/postagens" element={<PostagensPage />} />
+          <Route path="/agentes" element={<AgentesPage />} />
+          <Route path="/postador" element={<Postador />} />
+          <Route path="/cronograma" element={<CronogramaPage />} />
+          <Route path="/perfil" element={<PerfilPage />} />
+          <Route path="/whatsapp" element={<WhatsAppPage />} />
+        </Route>
       </Route>
     </Routes>
   );
