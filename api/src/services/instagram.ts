@@ -1,5 +1,12 @@
 const GRAPH_API_BASE = "https://graph.facebook.com/v21.0";
 
+const FORM = "application/x-www-form-urlencoded";
+
+function graphGet(path: string, token: string): string {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${GRAPH_API_BASE}${path}${sep}access_token=${encodeURIComponent(token)}`;
+}
+
 export type PublishResult = {
   id_container: string;
   id_media: string;
@@ -9,6 +16,7 @@ export type PublishResult = {
 /**
  * Cria um container de mídia (imagem ou Reels) e publica no Instagram.
  * Requer token e ig_user_id da conta profissional vinculada à página.
+ * access_token vai no corpo POST (form) para não quebrar tokens com &, =, etc. na query string.
  */
 export async function publishToInstagram(
   caption: string,
@@ -23,11 +31,21 @@ export async function publishToInstagram(
     throw new Error("Credenciais do Instagram incompletas. Configure em Administração: token e ID do usuário Instagram.");
   }
 
-  const createUrl = mediaType === "REELS"
-    ? `${GRAPH_API_BASE}/${igId}/media?video_url=${encodeURIComponent(mediaUrl)}&caption=${encodeURIComponent(caption)}&media_type=REELS&access_token=${token}`
-    : `${GRAPH_API_BASE}/${igId}/media?image_url=${encodeURIComponent(mediaUrl)}&caption=${encodeURIComponent(caption)}&access_token=${token}`;
+  const createParams = new URLSearchParams();
+  createParams.set("caption", caption);
+  createParams.set("access_token", token);
+  if (mediaType === "REELS") {
+    createParams.set("video_url", mediaUrl);
+    createParams.set("media_type", "REELS");
+  } else {
+    createParams.set("image_url", mediaUrl);
+  }
 
-  const createRes = await fetch(createUrl, { method: "POST" });
+  const createRes = await fetch(`${GRAPH_API_BASE}/${igId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": FORM },
+    body: createParams.toString(),
+  });
   const createJson = (await createRes.json()) as { id?: string; error?: { message: string; code: number } };
   if (createJson.error) {
     throw new Error(createJson.error.message || "Erro ao criar container no Instagram");
@@ -45,9 +63,7 @@ export async function publishToInstagram(
   while (elapsed < maxWait) {
     await new Promise((r) => setTimeout(r, step));
     elapsed += step;
-    const statusRes = await fetch(
-      `${GRAPH_API_BASE}/${creationId}?fields=status_code,status&access_token=${token}`
-    );
+    const statusRes = await fetch(graphGet(`/${creationId}?fields=status_code,status`, token));
     const statusJson = (await statusRes.json()) as {
       status_code?: string;
       status?: string;
@@ -70,10 +86,14 @@ export async function publishToInstagram(
     );
   }
 
-  const publishRes = await fetch(
-    `${GRAPH_API_BASE}/${igId}/media_publish?creation_id=${creationId}&access_token=${token}`,
-    { method: "POST" }
-  );
+  const publishParams = new URLSearchParams();
+  publishParams.set("creation_id", creationId);
+  publishParams.set("access_token", token);
+  const publishRes = await fetch(`${GRAPH_API_BASE}/${igId}/media_publish`, {
+    method: "POST",
+    headers: { "Content-Type": FORM },
+    body: publishParams.toString(),
+  });
   const publishJson = (await publishRes.json()) as { id?: string; error?: { message: string } };
   if (publishJson.error) {
     throw new Error(publishJson.error.message || "Erro ao publicar no Instagram");
@@ -86,9 +106,7 @@ export async function publishToInstagram(
   // Obter permalink do post (opcional)
   let linkPost: string | null = null;
   try {
-    const permRes = await fetch(
-      `${GRAPH_API_BASE}/${idMedia}?fields=permalink&access_token=${token}`
-    );
+    const permRes = await fetch(graphGet(`/${idMedia}?fields=permalink`, token));
     const permJson = (await permRes.json()) as { permalink?: string };
     linkPost = permJson.permalink ?? null;
   } catch {
@@ -108,9 +126,7 @@ async function waitContainerReady(creationId: string, token: string, maxWaitMs =
   while (elapsed < maxWaitMs) {
     await new Promise((r) => setTimeout(r, step));
     elapsed += step;
-    const statusRes = await fetch(
-      `${GRAPH_API_BASE}/${creationId}?fields=status_code,status&access_token=${token}`
-    );
+    const statusRes = await fetch(graphGet(`/${creationId}?fields=status_code,status`, token));
     const statusJson = (await statusRes.json()) as { status_code?: string; status?: string; error?: { message?: string } };
     if (statusJson.status_code === "FINISHED") return;
     if (statusJson.status_code === "ERROR" || statusJson.status === "ERROR") {
@@ -143,8 +159,15 @@ export async function publishCarouselToInstagram(
 
   const childIds: string[] = [];
   for (const imageUrl of mediaUrls) {
-    const createUrl = `${GRAPH_API_BASE}/${igId}/media?image_url=${encodeURIComponent(imageUrl)}&is_carousel_item=true&access_token=${token}`;
-    const createRes = await fetch(createUrl, { method: "POST" });
+    const childParams = new URLSearchParams();
+    childParams.set("image_url", imageUrl);
+    childParams.set("is_carousel_item", "true");
+    childParams.set("access_token", token);
+    const createRes = await fetch(`${GRAPH_API_BASE}/${igId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": FORM },
+      body: childParams.toString(),
+    });
     const createJson = (await createRes.json()) as { id?: string; error?: { message: string } };
     if (createJson.error) {
       throw new Error(createJson.error.message || "Erro ao criar item do carrossel no Instagram");
@@ -158,9 +181,16 @@ export async function publishCarouselToInstagram(
     await waitContainerReady(childId, token);
   }
 
-  const childrenParam = childIds.join(",");
-  const parentUrl = `${GRAPH_API_BASE}/${igId}/media?media_type=CAROUSEL&children=${encodeURIComponent(childrenParam)}&caption=${encodeURIComponent(caption)}&access_token=${token}`;
-  const parentRes = await fetch(parentUrl, { method: "POST" });
+  const parentParams = new URLSearchParams();
+  parentParams.set("media_type", "CAROUSEL");
+  parentParams.set("children", childIds.join(","));
+  parentParams.set("caption", caption);
+  parentParams.set("access_token", token);
+  const parentRes = await fetch(`${GRAPH_API_BASE}/${igId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": FORM },
+    body: parentParams.toString(),
+  });
   const parentJson = (await parentRes.json()) as { id?: string; error?: { message: string } };
   if (parentJson.error) {
     throw new Error(parentJson.error.message || "Erro ao criar carrossel no Instagram");
@@ -170,10 +200,14 @@ export async function publishCarouselToInstagram(
 
   await waitContainerReady(parentId, token, 60000);
 
-  const publishRes = await fetch(
-    `${GRAPH_API_BASE}/${igId}/media_publish?creation_id=${parentId}&access_token=${token}`,
-    { method: "POST" }
-  );
+  const carouselPublishParams = new URLSearchParams();
+  carouselPublishParams.set("creation_id", parentId);
+  carouselPublishParams.set("access_token", token);
+  const publishRes = await fetch(`${GRAPH_API_BASE}/${igId}/media_publish`, {
+    method: "POST",
+    headers: { "Content-Type": FORM },
+    body: carouselPublishParams.toString(),
+  });
   const publishJson = (await publishRes.json()) as { id?: string; error?: { message: string } };
   if (publishJson.error) {
     throw new Error(publishJson.error.message || "Erro ao publicar carrossel no Instagram");
@@ -183,7 +217,7 @@ export async function publishCarouselToInstagram(
 
   let linkPost: string | null = null;
   try {
-    const permRes = await fetch(`${GRAPH_API_BASE}/${idMedia}?fields=permalink&access_token=${token}`);
+    const permRes = await fetch(graphGet(`/${idMedia}?fields=permalink`, token));
     const permJson = (await permRes.json()) as { permalink?: string };
     linkPost = permJson.permalink ?? null;
   } catch {

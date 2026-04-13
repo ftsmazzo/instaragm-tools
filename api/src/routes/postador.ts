@@ -489,7 +489,13 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
         message: "Post publicado no Instagram.",
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erro ao publicar no Instagram";
+      let msg = err instanceof Error ? err.message : "Erro ao publicar no Instagram";
+      if (msg.includes("Only photo or video")) {
+        msg += " A URL da mídia precisa ser pública (HTTPS), acessível sem login, e devolver imagem/vídeo real — teste o link em aba anônima. Se usar armazenamento local na API, confira POSTADOR_MEDIA_BASE_URL e firewall.";
+      }
+      if (msg.includes("Malformed access token")) {
+        msg += " Cole o token de acesso do Instagram novamente em Administração (sem espaços ou quebras de linha no início/fim).";
+      }
       fastify.log.error({ err }, "publicar");
       return reply.status(500).send({ error: msg });
     }
