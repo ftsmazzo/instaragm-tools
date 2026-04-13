@@ -6,11 +6,48 @@ const getBaseUrl = (): string => {
 
 const base = getBaseUrl();
 
+export const AUTH_STORAGE_KEY = "mv_auth_token";
+
+function emitAuthChanged(): void {
+  try {
+    window.dispatchEvent(new CustomEvent("mv-auth-changed"));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(AUTH_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(AUTH_STORAGE_KEY, token);
+    else localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  emitAuthChanged();
+}
+
+export function clearAuthToken(): void {
+  setAuthToken(null);
+}
+
 type FetchOptions = Omit<RequestInit, "body"> & { body?: Record<string, unknown> };
 
 async function fetchJson<T>(path: string, options?: FetchOptions): Promise<T> {
   const { body, ...init } = options ?? {};
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...(init.headers as Record<string, string>) };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init.headers as Record<string, string>),
+  };
+  const t = getAuthToken();
+  if (t) headers["Authorization"] = `Bearer ${t}`;
   const res = await fetch(`${base}${path}`, {
     ...init,
     headers,
@@ -91,8 +128,43 @@ export type PostagensResponse = {
 
 export type RasparResponse = PostagensResponse & { triggered: boolean };
 
+export type AuthStatus = {
+  database: boolean;
+  hasUsers: boolean;
+  allowRegister: boolean;
+  authMode?: string;
+  message?: string;
+};
+
+function postadorAuthHeaders(): Record<string, string> {
+  const t = getAuthToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 export const api = {
   getHealth: () => fetchJson<Health>("/health"),
+  getAuthStatus: () => fetchJson<AuthStatus>("/api/auth/status"),
+  login: (email: string, password: string) =>
+    fetchJson<{ token: string; user: { email: string; organization_id: string } }>("/api/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }),
+  register: (email: string, password: string, organizationName: string) =>
+    fetchJson<{ token: string; user: { email: string; organization_id: string } }>("/api/auth/register", {
+      method: "POST",
+      body: { email, password, organizationName },
+    }),
+  getMe: () => fetchJson<{ user: { id: string; email: string; organization_id: string } }>("/api/auth/me"),
+  getMeWorkspace: () => fetchJson<Config>("/api/me/workspace"),
+  putMeWorkspace: (body: {
+    empresa?: { nome: string };
+    contas_instagram?: ContaInstagramInput[];
+    instagram_default_id?: string | null;
+  }) =>
+    fetchJson<{ saved: boolean; received: Config }>("/api/me/workspace", {
+      method: "PUT",
+      body,
+    }),
   getConfig: () => fetchJson<Config>("/api/config"),
   putConfig: (body: {
     empresa?: { nome: string };
@@ -126,6 +198,7 @@ export const api = {
         if (model) form.set("model", model);
         return fetch(`${base}/api/postador/gerar-caption`, {
           method: "POST",
+          headers: postadorAuthHeaders(),
           body: form,
         }).then(async (res) => {
           if (!res.ok) {
@@ -202,7 +275,11 @@ export const api = {
     uploadMidia: (file: File) => {
       const form = new FormData();
       form.set("arquivo", file);
-      return fetch(`${base}/api/postador/upload-midia`, { method: "POST", body: form }).then(async (res) => {
+      return fetch(`${base}/api/postador/upload-midia`, {
+        method: "POST",
+        headers: postadorAuthHeaders(),
+        body: form,
+      }).then(async (res) => {
         if (!res.ok) {
           const errBody = await res.json().catch(() => ({}));
           const msg = (errBody as { error?: string }).error ?? `API ${res.status}: ${res.statusText}`;

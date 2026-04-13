@@ -8,11 +8,13 @@ import { PerfilPage } from "./pages/PerfilPage";
 import { WhatsAppPage } from "./pages/WhatsAppPage";
 import { Postador } from "./pages/Postador";
 import { CronogramaPage } from "./pages/CronogramaPage";
+import { LoginPage } from "./pages/LoginPage";
 
 export default function App() {
   return (
-    <AppLayout>
-      <Routes>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route element={<AppLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/postagens" element={<PostagensPage />} />
@@ -21,7 +23,7 @@ export default function App() {
         <Route path="/cronograma" element={<CronogramaPage />} />
         <Route path="/perfil" element={<PerfilPage />} />
         <Route path="/whatsapp" element={<WhatsAppPage />} />
-      </Routes>
-    </AppLayout>
+      </Route>
+    </Routes>
   );
 }

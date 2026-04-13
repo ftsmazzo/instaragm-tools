@@ -14,10 +14,10 @@ export function HomePage() {
 
   return (
     <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Painel FabriaIA</h1>
+      <h1 className="text-2xl font-semibold text-gray-900">Máquina de vendas</h1>
       <p className="text-gray-600 mt-2 mb-6">
-        Hub para Instagram: criar posts com IA no <strong>Postador</strong>, ver o que já foi publicado em{" "}
-        <strong>Postagens raspadas</strong> e configurar contas em <strong>Administração</strong>.
+        FabriaIA — hub para Instagram: <strong>Postador</strong> com IA, <strong>Postagens raspadas</strong>,{" "}
+        <strong>Administração</strong> das contas (com login quando o servidor usa banco multiusuário).
       </p>
 
       <div className="rounded-lg border border-gray-200 bg-white p-4 mb-6">

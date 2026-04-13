@@ -8,7 +8,8 @@ import { rasparPaginaImovel, montarDescricaoParaCaption, baixarEEnviarParaCloudi
 import { publishToInstagram, publishCarouselToInstagram } from "../services/instagram.js";
 import { gerarImagemComIA } from "../services/imageGen.js";
 import { adicionarTextoCarrossel } from "../services/carouselTexto.js";
-import { loadConfig, getContaParaPublicar } from "../store/config.js";
+import { getContaParaPublicar } from "../store/config.js";
+import { resolveConfigStore } from "../context/workspaceConfig.js";
 import { appendCronograma, listCronograma } from "../store/cronograma.js";
 import { listAgendados, addAgendado, getAgendado, deleteAgendado } from "../store/agendados.js";
 
@@ -120,7 +121,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ error: "Agendado não encontrado." });
     }
 
-    const config = await loadConfig();
+    const config = await resolveConfigStore(fastify, request);
     const creds = getContaParaPublicar(config, body?.conta_id);
     if (!creds) {
       return reply.status(400).send({
@@ -440,7 +441,7 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    const config = await loadConfig();
+    const config = await resolveConfigStore(fastify, request);
     const creds = getContaParaPublicar(config, body?.conta_id);
     if (!creds) {
       fastify.log.info({ reason: "instagram_credentials_missing" }, "publicar 400");

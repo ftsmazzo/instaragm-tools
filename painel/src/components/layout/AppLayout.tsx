@@ -1,8 +1,17 @@
-import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { navGroups, itemsByGroup } from "../../config/navigation";
+import { clearAuthToken, getAuthToken } from "../../api/client";
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout() {
   const loc = useLocation();
+  const navigate = useNavigate();
+  const [hasToken, setHasToken] = useState(() => Boolean(getAuthToken()));
+  useEffect(() => {
+    const sync = () => setHasToken(Boolean(getAuthToken()));
+    window.addEventListener("mv-auth-changed", sync);
+    return () => window.removeEventListener("mv-auth-changed", sync);
+  }, []);
 
   const isActive = (path: string) => {
     if (path === "/") return loc.pathname === "/";
@@ -14,9 +23,27 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <aside className="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-100">
           <Link to="/" className="font-semibold text-gray-900 tracking-tight">
-            FabriaIA
+            Máquina de vendas
           </Link>
-          <p className="text-xs text-gray-500 mt-0.5">Painel</p>
+          <p className="text-xs text-gray-500 mt-0.5">FabriaIA · Painel</p>
+          <div className="mt-3 flex flex-col gap-1 text-xs">
+            {hasToken ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearAuthToken();
+                  navigate("/login", { replace: true });
+                }}
+                className="text-left text-gray-600 hover:text-indigo-600"
+              >
+                Sair
+              </button>
+            ) : (
+              <Link to="/login" className="text-indigo-600 hover:underline">
+                Entrar
+              </Link>
+            )}
+          </div>
         </div>
         <nav className="p-3 flex-1 overflow-y-auto space-y-5">
           {navGroups.map((group) => {
@@ -48,7 +75,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       </aside>
-      <main className="flex-1 min-w-0 overflow-x-auto">{children}</main>
+      <main className="flex-1 min-w-0 overflow-x-auto">
+        <Outlet />
+      </main>
     </div>
   );
 }

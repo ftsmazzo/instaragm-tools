@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
-import { api, type Config, type ContaInstagramRes, type ContaInstagramInput } from "../api/client";
+import { Link } from "react-router-dom";
+import {
+  api,
+  getAuthToken,
+  clearAuthToken,
+  type Config,
+  type ContaInstagramRes,
+  type ContaInstagramInput,
+} from "../api/client";
 
 export function AdminPage() {
   const [config, setConfig] = useState<Config | null>(null);
@@ -9,16 +17,56 @@ export function AdminPage() {
   const [nome, setNome] = useState("");
   const [editId, setEditId] = useState<string | "new" | null>(null);
   const [form, setForm] = useState({ nome: "", ig_user_id: "", access_token: "" });
+  /** Dados vêm de /api/me/workspace (organização + contas no PostgreSQL). */
+  const [useWorkspace, setUseWorkspace] = useState(false);
+  const [needLogin, setNeedLogin] = useState(false);
 
   useEffect(() => {
-    api
-      .getConfig()
-      .then((data) => {
-        setConfig(data);
-        setNome(data.empresa?.nome ?? "");
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Erro ao carregar"))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const status = await api.getAuthStatus();
+        if (cancelled) return;
+        if (status.authMode === "workspace" && status.hasUsers) {
+          const token = getAuthToken();
+          if (!token) {
+            setNeedLogin(true);
+            setUseWorkspace(true);
+            setConfig(null);
+            return;
+          }
+          try {
+            const data = await api.getMeWorkspace();
+            if (cancelled) return;
+            setConfig(data);
+            setNome(data.empresa?.nome ?? "");
+            setUseWorkspace(true);
+            setNeedLogin(false);
+          } catch {
+            clearAuthToken();
+            setNeedLogin(true);
+            setConfig(null);
+            setUseWorkspace(true);
+          }
+        } else {
+          const data = await api.getConfig();
+          if (cancelled) return;
+          setConfig(data);
+          setNome(data.empresa?.nome ?? "");
+          setUseWorkspace(false);
+          setNeedLogin(false);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Erro ao carregar");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const contas = config?.contas_instagram ?? [];
@@ -27,9 +75,13 @@ export function AdminPage() {
   const handleSaveEmpresa = () => {
     setSaving(true);
     setError(null);
-    api
-      .putConfig({ empresa: { nome } })
-      .then((res) => setConfig((c) => (c ? { ...c, empresa: res.received?.empresa ?? c.empresa } : null)))
+    const p =
+      useWorkspace && getAuthToken()
+        ? api.putMeWorkspace({ empresa: { nome } })
+        : api.putConfig({ empresa: { nome } });
+    p.then((res) =>
+      setConfig((c) => (c ? { ...c, empresa: res.received?.empresa ?? c.empresa } : null))
+    )
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao salvar"))
       .finally(() => setSaving(false));
   };
@@ -37,9 +89,13 @@ export function AdminPage() {
   const handleSetDefault = (id: string) => {
     setSaving(true);
     setError(null);
-    api
-      .putConfig({ instagram_default_id: id })
-      .then((res) => setConfig((c) => (c ? { ...c, instagram_default_id: res.received?.instagram_default_id ?? id } : null)))
+    const p =
+      useWorkspace && getAuthToken()
+        ? api.putMeWorkspace({ instagram_default_id: id })
+        : api.putConfig({ instagram_default_id: id });
+    p.then((res) =>
+      setConfig((c) => (c ? { ...c, instagram_default_id: res.received?.instagram_default_id ?? id } : null))
+    )
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao salvar"))
       .finally(() => setSaving(false));
   };
@@ -59,13 +115,15 @@ export function AdminPage() {
               ? { id: c.id, nome: form.nome.trim(), ig_user_id: form.ig_user_id.trim(), access_token: form.access_token.trim() || undefined }
               : { id: c.id, nome: c.nome, ig_user_id: c.ig_user_id }
           );
-    api
-      .putConfig({ contas_instagram: list })
-      .then((res) => {
-        setConfig((c) => (c ? { ...c, contas_instagram: res.received?.contas_instagram ?? c.contas_instagram } : null));
-        setEditId(null);
-        setForm({ nome: "", ig_user_id: "", access_token: "" });
-      })
+    const p =
+      useWorkspace && getAuthToken()
+        ? api.putMeWorkspace({ contas_instagram: list })
+        : api.putConfig({ contas_instagram: list });
+    p.then((res) => {
+      setConfig((c) => (c ? { ...c, contas_instagram: res.received?.contas_instagram ?? c.contas_instagram } : null));
+      setEditId(null);
+      setForm({ nome: "", ig_user_id: "", access_token: "" });
+    })
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao salvar"))
       .finally(() => setSaving(false));
   };
@@ -75,16 +133,16 @@ export function AdminPage() {
     const list = contas.filter((c) => c.id !== id).map((c) => ({ id: c.id, nome: c.nome, ig_user_id: c.ig_user_id }));
     setSaving(true);
     setError(null);
-    api
-      .putConfig({
-        contas_instagram: list,
-        instagram_default_id: defaultId === id ? (list[0]?.id ?? null) : defaultId,
-      })
-      .then((res) =>
-        setConfig((c) =>
-          c ? { ...c, contas_instagram: res.received?.contas_instagram ?? [], instagram_default_id: res.received?.instagram_default_id ?? null } : null
-        )
+    const body = {
+      contas_instagram: list,
+      instagram_default_id: defaultId === id ? (list[0]?.id ?? null) : defaultId,
+    };
+    const p = useWorkspace && getAuthToken() ? api.putMeWorkspace(body) : api.putConfig(body);
+    p.then((res) =>
+      setConfig((c) =>
+        c ? { ...c, contas_instagram: res.received?.contas_instagram ?? [], instagram_default_id: res.received?.instagram_default_id ?? null } : null
       )
+    )
       .catch((e) => setError(e instanceof Error ? e.message : "Erro ao remover"))
       .finally(() => setSaving(false));
   };
@@ -106,12 +164,27 @@ export function AdminPage() {
   return (
     <div className="p-6 max-w-2xl">
       <h1 className="text-2xl font-semibold text-gray-900">Administração</h1>
-      <p className="text-gray-600 mt-2 mb-6">Dados da empresa e contas Instagram para postar (várias contas).</p>
+      <p className="text-gray-600 mt-2 mb-6">
+        {useWorkspace
+          ? "Workspace da sua organização: empresa e contas Instagram usadas no Postador e integrações."
+          : "Dados da empresa e contas Instagram para postar (modo legado, sem login)."}
+      </p>
+
+      {needLogin && (
+        <div className="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 text-sm">
+          <p className="font-medium">Login necessário</p>
+          <p className="mt-1 text-indigo-800/90">As contas Instagram estão vinculadas ao seu usuário e organização.</p>
+          <Link to="/login" className="mt-3 inline-block text-indigo-700 font-semibold hover:underline">
+            Ir para login
+          </Link>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">{error}</div>
       )}
 
+      {!needLogin && (
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Nome da empresa</label>
@@ -223,6 +296,7 @@ export function AdminPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

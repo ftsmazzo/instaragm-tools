@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import jwt from "@fastify/jwt";
 import multipart from "@fastify/multipart";
 import { ensureTables } from "./db/index.js";
 import { healthRoutes } from "./routes/health.js";
@@ -7,17 +8,24 @@ import { configRoutes } from "./routes/config.js";
 import { postagensRoutes } from "./routes/postagens.js";
 import { agentesRoutes } from "./routes/agentes.js";
 import { postadorRoutes } from "./routes/postador.js";
+import { authRoutes } from "./routes/auth.js";
+import { meWorkspaceRoutes } from "./routes/meWorkspace.js";
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
+
+const JWT_SECRET = process.env.JWT_SECRET?.trim() || "dev-mudar-JWT_SECRET-em-producao";
 
 async function build() {
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: true });
+  await app.register(jwt, { secret: JWT_SECRET, sign: { expiresIn: "14d" } });
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB para upload vídeo/imagem do Postador
 
   await app.register(healthRoutes, { prefix: "/" });
+  await app.register(authRoutes, { prefix: "/api/auth" });
+  await app.register(meWorkspaceRoutes, { prefix: "/api/me" });
   await app.register(configRoutes, { prefix: "/api/config" });
   await app.register(postagensRoutes, { prefix: "/api/postagens" });
   await app.register(agentesRoutes, { prefix: "/api/agentes" });
