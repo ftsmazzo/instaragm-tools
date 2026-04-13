@@ -46,7 +46,10 @@ export type ImovelDados = {
   resumo: string[];
   caracteristicas: string[];
   descricao: string;
+  /** Primeira imagem (retrocompat). */
   imageUrl: string | null;
+  /** Até 10 URLs para carrossel no Instagram (mesma ordem da galeria do site). */
+  imageUrls: string[];
 };
 
 function resolveUrl(base: string, path: string): string {
@@ -55,6 +58,66 @@ function resolveUrl(base: string, path: string): string {
   if (path.startsWith("//")) return u.protocol + path;
   if (path.startsWith("/")) return u.origin + path;
   return base.replace(/\/[^/]*$/, "/") + path;
+}
+
+const MAX_IMAGENS_IMOVEL = 10;
+
+/** Extrai URLs de imagem do objeto imóvel (Next.js pageProps). */
+function coletarImagensNext(imovel: Record<string, unknown>, pageBaseUrl: string): string[] {
+  const fields: unknown[] = [
+    imovel.imagens,
+    imovel.fotos,
+    imovel.galeria,
+    imovel.images,
+    imovel.fotosUrls,
+    imovel.imagem,
+    imovel.foto,
+    imovel.image,
+  ];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const addAbs = (raw: string) => {
+    const s = raw.trim();
+    if (!s || s.startsWith("data:")) return;
+    const abs = s.startsWith("http") ? s : resolveUrl(pageBaseUrl, s);
+    const internal = urlParaFetchImovel(abs);
+    if (seen.has(internal)) return;
+    seen.add(internal);
+    out.push(internal);
+  };
+  for (const field of fields) {
+    if (field == null) continue;
+    if (Array.isArray(field)) {
+      for (const item of field) {
+        if (typeof item === "string") addAbs(item);
+        else if (item && typeof item === "object") {
+          const o = item as Record<string, unknown>;
+          const u = o.url ?? o.src ?? o.path ?? o.uri;
+          if (typeof u === "string") addAbs(u);
+        }
+      }
+    } else if (typeof field === "string") {
+      addAbs(field);
+    }
+  }
+  return out.slice(0, MAX_IMAGENS_IMOVEL);
+}
+
+function coletarImagensHtml(root: ReturnType<typeof parse>, pageUrl: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (src: string | null | undefined) => {
+    if (!src?.trim() || src.startsWith("data:")) return;
+    if (/logo|icon|avatar|favicon|sprite|placeholder/i.test(src)) return;
+    if (!/\.(jpe?g|png|webp|gif)(\?|$)/i.test(src) && !/\/(upload|imoveis|storage|media|images)\b/i.test(src)) return;
+    const abs = resolveUrl(pageUrl, src.trim());
+    const internal = urlParaFetchImovel(abs);
+    if (seen.has(internal)) return;
+    seen.add(internal);
+    out.push(internal);
+  };
+  root.querySelectorAll("img[src]").forEach((img) => add(img.getAttribute("src")));
+  return out.slice(0, MAX_IMAGENS_IMOVEL);
 }
 
 /**
@@ -108,11 +171,8 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
         const resumo = resumoArr.map(String);
         const caracArr = Array.isArray(imovel.caracteristicas) ? imovel.caracteristicas : Array.isArray(imovel.extras) ? imovel.extras : [];
         const caracteristicas = caracArr.map(String);
-        let imageUrl: string | null = null;
-        const img = imovel.imagem ?? imovel.foto ?? imovel.image ?? imovel.images;
-        if (typeof img === "string") imageUrl = img.startsWith("http") ? img : new URL(img, baseUrl).href;
-        else if (Array.isArray(img) && img[0]) imageUrl = String(img[0]).startsWith("http") ? String(img[0]) : new URL(String(img[0]), baseUrl).href;
-        if (imageUrl) imageUrl = urlParaFetchImovel(imageUrl);
+        const imageUrls = coletarImagensNext(imovel, baseUrl);
+        const imageUrl = imageUrls[0] ?? null;
         return {
           titulo,
           codigo,
@@ -124,6 +184,7 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
           caracteristicas,
           descricao,
           imageUrl,
+          imageUrls,
         };
       }
     } catch {
@@ -141,13 +202,22 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
   const getText = (sel: string): string =>
     root.querySelector(sel)?.textContent?.trim().replace(/\s+/g, " ").trim() ?? "";
 
-  const imageUrl =
+  const ogImage =
     getMeta("og:image") ||
     root.querySelector("img[src*='imoveis'], img[src*='upload'], .gallery img, [data-imagem]")?.getAttribute("src") ||
     root.querySelector("img")?.getAttribute("src") ||
     null;
-  let absoluteImageUrl: string | null = imageUrl ? resolveUrl(url, imageUrl) : null;
-  if (absoluteImageUrl) absoluteImageUrl = urlParaFetchImovel(absoluteImageUrl);
+  let absoluteOg: string | null = ogImage ? resolveUrl(url, ogImage) : null;
+  if (absoluteOg) absoluteOg = urlParaFetchImovel(absoluteOg);
+
+  let imageUrls = coletarImagensHtml(root, url);
+  if (absoluteOg && !imageUrls.includes(absoluteOg)) {
+    imageUrls = [absoluteOg, ...imageUrls].slice(0, MAX_IMAGENS_IMOVEL);
+  }
+  if (imageUrls.length === 0 && absoluteOg) {
+    imageUrls = [absoluteOg];
+  }
+  const absoluteImageUrl = imageUrls[0] ?? null;
 
   // Título: h1 ou og:title ou title
   const titulo =
@@ -223,6 +293,7 @@ export async function rasparPaginaImovel(url: string): Promise<ImovelDados> {
     caracteristicas,
     descricao,
     imageUrl: absoluteImageUrl,
+    imageUrls,
   };
 }
 
@@ -240,6 +311,9 @@ export function montarDescricaoParaCaption(d: ImovelDados): string {
   if (d.resumo.length) parts.push(`Resumo: ${d.resumo.join(", ")}`);
   if (d.caracteristicas.length) parts.push(`Características: ${d.caracteristicas.join(", ")}`);
   if (d.descricao) parts.push(`Descrição: ${d.descricao}`);
+  if (d.imageUrls.length > 1) {
+    parts.push(`O anúncio tem ${d.imageUrls.length} fotos na galeria (carrossel).`);
+  }
   return parts.join("\n");
 }
 

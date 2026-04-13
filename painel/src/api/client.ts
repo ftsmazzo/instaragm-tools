@@ -215,7 +215,12 @@ export const api = {
       });
     },
     gerarPorUrl: (url: string, provider?: string | null, model?: string | null) =>
-      fetchJson<{ caption: string; media_url?: string; media_type?: string }>("/api/postador/por-url", {
+      fetchJson<{
+        caption: string;
+        media_url?: string;
+        media_urls?: string[];
+        media_type?: "IMAGE" | "CAROUSEL" | "REELS";
+      }>("/api/postador/por-url", {
         method: "POST",
         body: { url, provider: provider || undefined, model: model || undefined },
       }),
@@ -234,7 +239,7 @@ export const api = {
       caption: string;
       media_url?: string;
       media_urls?: string[];
-      media_type?: "IMAGE" | "REELS";
+      media_type?: "IMAGE" | "REELS" | "CAROUSEL";
       conta_id?: string | null;
     }) =>
       fetchJson<{ ok: boolean; id_container?: string; id_media?: string; link_post?: string; message?: string }>("/api/postador/publicar", {

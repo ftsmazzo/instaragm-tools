@@ -257,20 +257,36 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.status(400).send({ error: "Não foi possível extrair dados da página. Verifique se a URL é de um imóvel." });
       }
 
-      let mediaUrl: string | undefined;
-      if (dados.imageUrl && isStorageConfigured()) {
-        const { url: cloudUrl } = await baixarEEnviarParaCloudinary(dados.imageUrl);
-        mediaUrl = cloudUrl;
+      const urlsOriginais =
+        dados.imageUrls.length > 0 ? dados.imageUrls : dados.imageUrl ? [dados.imageUrl] : [];
+      const uploaded: string[] = [];
+      if (urlsOriginais.length > 0 && isStorageConfigured()) {
+        for (const src of urlsOriginais.slice(0, 10)) {
+          try {
+            const { url: publicUrl } = await baixarEEnviarParaCloudinary(src);
+            uploaded.push(publicUrl);
+          } catch (e) {
+            fastify.log.warn({ err: e, src: src.slice(0, 80) }, "por-url: imagem da galeria ignorada");
+          }
+        }
       }
 
-      const caption = await gerarCaptionIA(descricao, "IMAGE", {
+      const carousel = uploaded.length > 1;
+      const caption = await gerarCaptionIA(descricao, carousel ? "CAROUSEL" : "IMAGE", {
         provider: providerNorm ?? (provider === "openai" ? "openai" : undefined),
         model: model || undefined,
       });
 
+      if (carousel) {
+        return reply.send({
+          caption,
+          media_urls: uploaded,
+          media_type: "CAROUSEL" as const,
+        });
+      }
       return reply.send({
         caption,
-        media_url: mediaUrl ?? undefined,
+        media_url: uploaded[0] ?? undefined,
         media_type: "IMAGE" as const,
       });
     } catch (err) {
@@ -352,7 +368,9 @@ export const postadorRoutes: FastifyPluginAsync = async (fastify) => {
 
     const providerNorm = provider === "claude" ? "claude" : undefined;
     try {
-      const caption = await gerarCaptionIA(descricao, mediaType === "CAROUSEL" ? "IMAGE" : mediaType, {
+      const captionTipo =
+        mediaType === "CAROUSEL" ? "CAROUSEL" : mediaType === "REELS" ? "REELS" : "IMAGE";
+      const caption = await gerarCaptionIA(descricao, captionTipo, {
         provider: providerNorm ?? (provider === "openai" ? "openai" : undefined),
         model: model || undefined,
       });

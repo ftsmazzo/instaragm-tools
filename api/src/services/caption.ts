@@ -114,10 +114,11 @@ export type GerarCaptionOptions = {
  */
 export async function gerarCaption(
   descricao: string,
-  mediaType?: "IMAGE" | "REELS",
+  mediaType?: "IMAGE" | "REELS" | "CAROUSEL",
   options?: GerarCaptionOptions
 ): Promise<string> {
-  const tipo = mediaType === "REELS" ? "Reels (vídeo)" : "post de imagem";
+  const tipo =
+    mediaType === "REELS" ? "Reels (vídeo)" : mediaType === "CAROUSEL" ? "carrossel com várias fotos" : "post de imagem";
   const user = `Conteúdo de entrada para criação do post:\n\n""" ${descricao} """\n\nCom base nesse conteúdo, gere UMA legenda final para um ${tipo} no Instagram, já formatada (parágrafos com \\n\\n, emojis, CTA que convide a comentar, hashtags no final em bloco). Retorne só a legenda, nada mais.`;
   return complete(SYSTEM_GERAR, user, options?.provider, options?.model);
 }

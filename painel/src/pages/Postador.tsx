@@ -209,7 +209,7 @@ export function Postador() {
     setLoading(true);
     try {
       const payload = isCarousel
-        ? { caption, media_urls: mediaUrls, media_type: "IMAGE" as const, conta_id: contaSelecionadaId }
+        ? { caption, media_urls: mediaUrls, media_type: "CAROUSEL" as const, conta_id: contaSelecionadaId }
         : { caption, media_url: mediaUrl!, media_type: (mediaType ?? "IMAGE") as "IMAGE" | "REELS", conta_id: contaSelecionadaId };
       const res = await api.postador.publicar(payload);
       setLinkPost(res.link_post ?? null);
@@ -254,10 +254,20 @@ export function Postador() {
     try {
       const res = await api.postador.gerarPorUrl(urlImovel.trim(), provider, effectiveModel);
       setCaption(res.caption);
-      setMediaUrl(res.media_url ?? null);
-      setMediaUrls(res.media_url ? [res.media_url] : []);
-      setMediaType("IMAGE");
-      setPreviewUrls(res.media_url ? [res.media_url] : []);
+      if (res.media_type === "CAROUSEL" && res.media_urls && res.media_urls.length > 1) {
+        setMediaType("CAROUSEL");
+        setMediaUrls(res.media_urls);
+        setMediaUrl(null);
+        setPreviewUrls(res.media_urls);
+        setTextosCarrossel(new Array(res.media_urls.length).fill(""));
+      } else {
+        const one = res.media_url ?? res.media_urls?.[0] ?? null;
+        setMediaType("IMAGE");
+        setMediaUrl(one);
+        setMediaUrls(one ? [one] : []);
+        setPreviewUrls(one ? [one] : []);
+        setTextosCarrossel(one ? [""] : []);
+      }
       setStep("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao gerar post a partir do link.");
@@ -674,7 +684,9 @@ export function Postador() {
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                       disabled={loading}
                     />
-                    <p className="mt-1 text-xs text-gray-500">A API acessa a página, extrai dados e imagem e gera a legenda.</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      A API raspa a página: se o site expuser a galeria (várias fotos), montamos um carrossel no Instagram (até 10 imagens) e geramos a legenda.
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -787,7 +799,7 @@ export function Postador() {
             {previewUrls.length === 1 && mediaType !== "REELS" && (
               <img src={previewUrls[0]} alt="Preview" className="max-h-48 rounded-md border border-gray-200" />
             )}
-            {fromUrl && (mediaType === "IMAGE" || !mediaType) && (
+            {fromUrl && mediaType === "IMAGE" && previewUrls.length === 1 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
