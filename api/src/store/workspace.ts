@@ -24,6 +24,16 @@ export async function userHasOrg(userId: string): Promise<{ orgId: string } | nu
   return row ? { orgId: row.organization_id } : null;
 }
 
+export async function userBelongsToOrg(userId: string, orgId: string): Promise<boolean> {
+  await ensureTables();
+  const pool = getPool();
+  const r = await pool.query<{ ok: string }>(
+    "SELECT 1::text AS ok FROM org_members WHERE user_id = $1 AND organization_id = $2::uuid LIMIT 1",
+    [userId, orgId]
+  );
+  return Boolean(r.rows[0]);
+}
+
 /** Config no mesmo formato do legado `app_config`, montado a partir do workspace. */
 export async function loadWorkspaceConfigStore(orgId: string): Promise<ConfigStore> {
   await ensureTables();

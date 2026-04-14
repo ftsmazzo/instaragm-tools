@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageShell } from "../components/layout/PageShell";
 import {
   api,
@@ -119,6 +119,7 @@ function emptyContaForm() {
 }
 
 export function AdminPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [config, setConfig] = useState<Config | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,6 +130,8 @@ export function AdminPage() {
   /** Dados vêm de /api/me/workspace (organização + contas no PostgreSQL). */
   const [useWorkspace, setUseWorkspace] = useState(false);
   const [needLogin, setNeedLogin] = useState(false);
+  /** API com META_APP_ID + SECRET + redirect (botão conectar). */
+  const [metaOAuth, setMetaOAuth] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +141,7 @@ export function AdminPage() {
       try {
         const status = await api.getAuthStatus();
         if (cancelled) return;
+        setMetaOAuth(Boolean(status.metaOAuthConfigured));
         if (status.authMode === "workspace" && status.hasUsers) {
           const token = getAuthToken();
           if (!token) {
@@ -177,6 +181,28 @@ export function AdminPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const mo = searchParams.get("meta_oauth");
+    if (!mo) return;
+    if (mo === "ok") {
+      setError(null);
+      const t = getAuthToken();
+      if (t) {
+        void api.getMeWorkspace().then((data) => {
+          setConfig(data);
+          setEmpresa(mergeEmpresa(data.empresa));
+        });
+      }
+    } else if (mo === "err") {
+      const r = searchParams.get("reason");
+      setError(r ? decodeURIComponent(r.replace(/\+/g, " ")) : "Não foi possível conectar ao Facebook.");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("meta_oauth");
+    next.delete("reason");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const contas = config?.contas_instagram ?? [];
   const defaultId = config?.instagram_default_id ?? null;
@@ -304,6 +330,18 @@ export function AdminPage() {
   };
 
   /** Substitui os dois textareas pelos padrões atuais do código (não lê outro lugar — é o que está em PROMPT_* nesta versão do painel). */
+  const handleConectarMeta = () => {
+    setError(null);
+    setSaving(true);
+    api
+      .getMetaOAuthUrl()
+      .then((r) => {
+        window.location.href = r.url;
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Não foi possível iniciar o login Meta."))
+      .finally(() => setSaving(false));
+  };
+
   const aplicarPromptsPadraoAtuais = () => {
     if (
       !confirm(
@@ -418,6 +456,26 @@ export function AdminPage() {
         <div>
           <h2 className="font-display text-xl font-semibold text-slate-900">Contas Instagram para postar</h2>
           <p className="mt-2 text-sm text-slate-600">Adicione várias contas e escolha qual usar ao publicar no Postador.</p>
+
+          {useWorkspace && metaOAuth && (
+            <div className="card mt-4 space-y-3 border-indigo-200/80 bg-indigo-50/40">
+              <div>
+                <h3 className="font-semibold text-slate-900">Conectar com Facebook / Instagram</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Abre o login da Meta: escolha a <strong>página</strong> que tem o Instagram comercial vinculado. Os tokens de
+                  postagem e de agente serão preenchidos automaticamente (o mesmo token de página, com as permissões do app).
+                </p>
+              </div>
+              <button type="button" onClick={handleConectarMeta} disabled={saving} className="btn-primary">
+                {saving ? "Redirecionando…" : "Conectar conta Meta"}
+              </button>
+              <p className="text-xs text-slate-500">
+                Requer app Meta da FabriaIA com Facebook Login, permissões aprovadas (ou modo desenvolvimento) e variáveis{" "}
+                <code className="rounded bg-white/80 px-1">PAINEL_PUBLIC_URL</code>,{" "}
+                <code className="rounded bg-white/80 px-1">META_OAUTH_REDIRECT_URI</code> iguais ao callback cadastrado na Meta.
+              </p>
+            </div>
+          )}
 
           <ul className="mb-6 mt-4 space-y-3">
             {contas.map((c) => (

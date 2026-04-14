@@ -3,6 +3,7 @@ import { isDbConfigured } from "../db/index.js";
 import { loadWorkspaceConfigStore, saveWorkspaceConfig } from "../store/workspace.js";
 import { emptyEmpresa, type ContaInstagramInput, type EmpresaPerfil } from "../store/config.js";
 import { toContaInstagramPublic } from "../util/instagramPublic.js";
+import { buildFacebookAuthorizeUrl, getMetaOAuthEnv, signMetaOAuthState } from "../services/metaOAuth.js";
 
 export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPluginOptions) {
   app.addHook("preHandler", async (request, reply) => {
@@ -14,6 +15,20 @@ export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPlug
     } catch {
       return reply.status(401).send({ error: "Não autorizado. Faça login." });
     }
+  });
+
+  /** URL do Facebook Login para conectar páginas Instagram ao app Meta da FabriaIA. */
+  app.get("/integrations/meta/oauth-url", async (request, reply) => {
+    const env = getMetaOAuthEnv();
+    if (!env) {
+      return reply.status(503).send({
+        error: "OAuth Meta não configurado. Defina META_APP_ID, META_APP_SECRET e META_OAUTH_REDIRECT_URI na API.",
+      });
+    }
+    const u = request.user as { sub: string; orgId: string };
+    const state = signMetaOAuthState(u.orgId, u.sub, env.stateSecret);
+    const url = buildFacebookAuthorizeUrl(env, state);
+    return reply.send({ url });
   });
 
   app.get("/workspace", async (request, reply) => {

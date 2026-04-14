@@ -6,8 +6,17 @@ import {
   createUserWithOrganization,
   findUserByEmail,
   userHasOrg,
+  userBelongsToOrg,
   copyLegacyConfigIntoWorkspace,
 } from "../store/workspace.js";
+import {
+  exchangeCodeForLongLivedUserToken,
+  fetchPagesWithInstagram,
+  getMetaOAuthEnv,
+  isMetaOAuthConfigured,
+  verifyMetaOAuthState,
+} from "../services/metaOAuth.js";
+import { mergeInstagramPagesIntoWorkspace } from "../services/metaOAuthWorkspace.js";
 
 export async function authRoutes(app: FastifyInstance, _opts: FastifyPluginOptions) {
   app.get("/status", async (_request, reply) => {
@@ -17,6 +26,7 @@ export async function authRoutes(app: FastifyInstance, _opts: FastifyPluginOptio
         hasUsers: false,
         allowRegister: false,
         authMode: "legacy",
+        metaOAuthConfigured: false,
         message: "Sem DATABASE_URL: use apenas /api/config (modo legado).",
       });
     }
@@ -27,7 +37,38 @@ export async function authRoutes(app: FastifyInstance, _opts: FastifyPluginOptio
       hasUsers: n > 0,
       allowRegister: n === 0 || allowOpen,
       authMode: "workspace",
+      metaOAuthConfigured: isMetaOAuthConfigured(),
     });
+  });
+
+  /** Callback público do Facebook Login (sem JWT). Redireciona de volta ao painel. */
+  app.get("/meta/callback", async (request, reply) => {
+    const env = getMetaOAuthEnv();
+    const baseRedirect = (process.env.PAINEL_PUBLIC_URL?.trim().replace(/\/$/, "") || "http://localhost:5173").trim();
+    const fail = (reason: string) =>
+      reply
+        .code(302)
+        .redirect(`${baseRedirect}/admin?meta_oauth=err&reason=${encodeURIComponent(reason.slice(0, 500))}`);
+    try {
+      if (!env) return fail("OAuth Meta não configurado na API (META_APP_ID / SECRET / REDIRECT_URI).");
+      const q = request.query as { code?: string; state?: string; error?: string; error_description?: string };
+      if (q.error) return fail((q.error_description || q.error || "login_cancelado").replace(/\+/g, " "));
+      const code = q.code?.trim();
+      const state = q.state?.trim();
+      if (!code || !state) return fail("Resposta inválida do Facebook.");
+      const payload = verifyMetaOAuthState(state, env.stateSecret);
+      if (!payload) return fail("Sessão expirada ou inválida. Abra Conectar de novo na Administração.");
+      const member = await userBelongsToOrg(payload.sub, payload.orgId);
+      if (!member) return fail("Usuário não autorizado para esta organização.");
+      const long = await exchangeCodeForLongLivedUserToken(env, code);
+      const pages = await fetchPagesWithInstagram(env, long.access_token);
+      await mergeInstagramPagesIntoWorkspace(payload.orgId, pages);
+      return reply.code(302).redirect(`${baseRedirect}/admin?meta_oauth=ok`);
+    } catch (err) {
+      request.log.error({ err }, "meta oauth callback");
+      const msg = err instanceof Error ? err.message : "Erro ao conectar.";
+      return fail(msg);
+    }
   });
 
   app.post("/register", async (request, reply) => {

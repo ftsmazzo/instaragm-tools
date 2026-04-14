@@ -155,6 +155,8 @@ export type AuthStatus = {
   allowRegister: boolean;
   authMode?: string;
   message?: string;
+  /** true quando META_APP_* e redirect estão na API (botão Conectar Meta no painel). */
+  metaOAuthConfigured?: boolean;
 };
 
 function postadorAuthHeaders(): Record<string, string> {
@@ -177,6 +179,7 @@ export const api = {
     }),
   getMe: () => fetchJson<{ user: { id: string; email: string; organization_id: string } }>("/api/auth/me"),
   getMeWorkspace: () => fetchJson<Config>("/api/me/workspace"),
+  getMetaOAuthUrl: () => fetchJson<{ url: string }>("/api/me/integrations/meta/oauth-url"),
   putMeWorkspace: (body: {
     empresa?: Partial<EmpresaPerfilRes>;
     contas_instagram?: ContaInstagramInput[];
