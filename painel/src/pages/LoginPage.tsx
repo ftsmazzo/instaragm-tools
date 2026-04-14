@@ -25,6 +25,10 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
+    if (status?.database === false && mode === "register") setMode("login");
+  }, [status?.database, mode]);
+
+  useEffect(() => {
     if (!getAuthToken()) return;
     api
       .getMe()
@@ -74,6 +78,10 @@ export function LoginPage() {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/95 p-8 shadow-lift backdrop-blur-sm">
+          {status === null && (
+            <p className="mb-6 text-center text-sm text-slate-500">Carregando opções de acesso…</p>
+          )}
+
           {status?.database === false && (
             <div className="alert-warn mb-6">
               API sem <code className="rounded bg-amber-100/80 px-1 text-xs">DATABASE_URL</code>: o login multiusuário não está
@@ -87,17 +95,17 @@ export function LoginPage() {
 
           {error && <div className="alert-error mb-6">{error}</div>}
 
-          <div className="mb-6 flex rounded-xl bg-slate-100/90 p-1">
-            <button
-              type="button"
-              onClick={() => setMode("login")}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
-                mode === "login" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              Entrar
-            </button>
-            {status?.allowRegister && (
+          {status?.database === true && (
+            <div className="mb-6 flex rounded-xl bg-slate-100/90 p-1">
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+                  mode === "login" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Já tenho conta
+              </button>
               <button
                 type="button"
                 onClick={() => setMode("register")}
@@ -105,12 +113,20 @@ export function LoginPage() {
                   mode === "register" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Criar conta
+                Nova conta
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          {status?.database === true && mode === "register" && !status.allowRegister && (
+            <div className="alert-warn mb-6 text-sm">
+              Cadastro público está desligado neste servidor (já existe pelo menos um usuário). Para permitir novos workspaces,
+              defina <code className="rounded bg-amber-100/80 px-1 text-xs">ALLOW_OPEN_REGISTER=true</code> nas variáveis de ambiente
+              da API e reinicie o serviço.
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className={`space-y-5 ${status === null ? "pointer-events-none opacity-50" : ""}`}>
             {mode === "register" && (
               <div>
                 <label className="label-field">Nome da empresa / workspace</label>
@@ -148,16 +164,26 @@ export function LoginPage() {
               />
               {mode === "register" && <p className="mt-1.5 text-xs text-slate-500">Mínimo 8 caracteres.</p>}
             </div>
-            <button type="submit" disabled={loading || status?.database === false} className="btn-primary mt-2 w-full py-3">
+            <button
+              type="submit"
+              disabled={
+                loading ||
+                status?.database === false ||
+                (mode === "register" && status?.database === true && !status.allowRegister)
+              }
+              className="btn-primary mt-2 w-full py-3"
+            >
               {loading ? "Aguarde…" : mode === "register" ? "Criar conta e entrar" : "Entrar"}
             </button>
           </form>
 
-          <p className="mt-8 text-center text-sm text-slate-500">
-            <Link to="/" className="font-medium text-indigo-600 hover:text-indigo-500">
-              Voltar ao início
-            </Link>
-          </p>
+          {status?.database === false && (
+            <p className="mt-8 text-center text-sm text-slate-500">
+              <Link to="/" className="font-medium text-indigo-600 hover:text-indigo-500">
+                Voltar ao painel (modo sem login)
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -15,8 +15,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route element={<AppLayout />}>
-        <Route element={<RequireSession />}>
+      {/* Sessão antes do layout: evita sidebar/início sem autenticação (modo workspace). */}
+      <Route element={<RequireSession />}>
+        <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/postagens" element={<PostagensPage />} />

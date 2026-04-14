@@ -46,8 +46,9 @@ export function RequireSession() {
 
   if (ready === "loading") {
     return (
-      <div className="min-h-[40vh] flex items-center justify-center text-gray-500 text-sm">
-        Verificando sessão...
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" aria-hidden />
+        <p className="mt-4 text-sm text-slate-600">Verificando sessão…</p>
       </div>
     );
   }
