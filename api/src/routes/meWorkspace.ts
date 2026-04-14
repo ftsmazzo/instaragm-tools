@@ -3,7 +3,7 @@ import { isDbConfigured } from "../db/index.js";
 import { loadWorkspaceConfigStore, saveWorkspaceConfig } from "../store/workspace.js";
 import { emptyEmpresa, type ContaInstagramInput, type EmpresaPerfil } from "../store/config.js";
 import { toContaInstagramPublic } from "../util/instagramPublic.js";
-import { buildFacebookAuthorizeUrl, getMetaOAuthEnv, signMetaOAuthState } from "../services/metaOAuth.js";
+import { buildMetaAuthorizeUrl, getMetaOAuthEnv, signMetaOAuthState } from "../services/metaOAuth.js";
 
 export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPluginOptions) {
   app.addHook("preHandler", async (request, reply) => {
@@ -27,7 +27,7 @@ export async function meWorkspaceRoutes(app: FastifyInstance, _opts: FastifyPlug
     }
     const u = request.user as { sub: string; orgId: string };
     const state = signMetaOAuthState(u.orgId, u.sub, env.stateSecret);
-    const url = buildFacebookAuthorizeUrl(env, state);
+    const url = buildMetaAuthorizeUrl(env, state);
     return reply.send({ url });
   });
 

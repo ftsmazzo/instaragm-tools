@@ -470,9 +470,11 @@ export function AdminPage() {
                 {saving ? "Redirecionando…" : "Conectar conta Meta"}
               </button>
               <p className="text-xs text-slate-500">
-                Requer app Meta da FabriaIA com Facebook Login, permissões aprovadas (ou modo desenvolvimento) e variáveis{" "}
-                <code className="rounded bg-white/80 px-1">PAINEL_PUBLIC_URL</code>,{" "}
-                <code className="rounded bg-white/80 px-1">META_OAUTH_REDIRECT_URI</code> iguais ao callback cadastrado na Meta.
+                Na API: <code className="rounded bg-white/80 px-1">META_OAUTH_REDIRECT_URI</code> igual ao callback (ex.:{" "}
+                <code className="rounded bg-white/80 px-1">…/api/auth/meta/callback</code>),{" "}
+                <code className="rounded bg-white/80 px-1">PAINEL_PUBLIC_URL</code>. Se você usou o login da empresa no produto
+                Instagram (URL <code className="rounded bg-white/80 px-1">instagram.com/oauth/authorize</code>), defina também{" "}
+                <code className="rounded bg-white/80 px-1">META_OAUTH_MODE=instagram</code>.
               </p>
             </div>
           )}

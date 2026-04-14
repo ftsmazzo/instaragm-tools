@@ -11,9 +11,13 @@ import {
 } from "../store/workspace.js";
 import {
   exchangeCodeForLongLivedUserToken,
+  exchangeInstagramCodeForLongLivedToken,
+  fetchInstagramBusinessMe,
   fetchPagesWithInstagram,
   getMetaOAuthEnv,
+  getMetaOAuthMode,
   isMetaOAuthConfigured,
+  pagesFromInstagramDirectAuth,
   verifyMetaOAuthState,
 } from "../services/metaOAuth.js";
 import { mergeInstagramPagesIntoWorkspace } from "../services/metaOAuthWorkspace.js";
@@ -60,9 +64,16 @@ export async function authRoutes(app: FastifyInstance, _opts: FastifyPluginOptio
       if (!payload) return fail("Sessão expirada ou inválida. Abra Conectar de novo na Administração.");
       const member = await userBelongsToOrg(payload.sub, payload.orgId);
       if (!member) return fail("Usuário não autorizado para esta organização.");
-      const long = await exchangeCodeForLongLivedUserToken(env, code);
-      const pages = await fetchPagesWithInstagram(env, long.access_token);
-      await mergeInstagramPagesIntoWorkspace(payload.orgId, pages);
+      if (getMetaOAuthMode() === "instagram") {
+        const long = await exchangeInstagramCodeForLongLivedToken(env, code);
+        const me = await fetchInstagramBusinessMe(env, long.access_token);
+        const pages = pagesFromInstagramDirectAuth(long.access_token, me);
+        await mergeInstagramPagesIntoWorkspace(payload.orgId, pages);
+      } else {
+        const long = await exchangeCodeForLongLivedUserToken(env, code);
+        const pages = await fetchPagesWithInstagram(env, long.access_token);
+        await mergeInstagramPagesIntoWorkspace(payload.orgId, pages);
+      }
       return reply.code(302).redirect(`${baseRedirect}/admin?meta_oauth=ok`);
     } catch (err) {
       request.log.error({ err }, "meta oauth callback");
