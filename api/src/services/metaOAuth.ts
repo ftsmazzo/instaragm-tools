@@ -16,7 +16,8 @@ export function getMetaOAuthEnv(): MetaOAuthEnv | null {
   const appSecret = process.env.META_APP_SECRET?.trim() ?? "";
   const redirectUri = process.env.META_OAUTH_REDIRECT_URI?.trim() ?? "";
   if (!appId || !appSecret || !redirectUri) return null;
-  const graphVersion = (process.env.META_GRAPH_VERSION?.trim() || GRAPH_DEFAULT).replace(/^v/, "v");
+  let graphVersion = process.env.META_GRAPH_VERSION?.trim() || GRAPH_DEFAULT;
+  if (!graphVersion.startsWith("v")) graphVersion = `v${graphVersion}`;
   const scopes =
     process.env.META_OAUTH_SCOPES?.trim() ||
     [
