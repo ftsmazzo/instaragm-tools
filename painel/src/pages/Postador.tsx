@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { api, getAuthToken, type AgendadoItem, type ContaInstagramRes, type Config } from "../api/client";
+import { PageShell } from "../components/layout/PageShell";
 
 const STORAGE_KEY = "postador_ia";
 
@@ -372,22 +373,13 @@ export function Postador() {
   ];
 
   return (
-    <div className="p-6 max-w-3xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Postador</h1>
-      <p className="text-gray-600 mt-1 mb-6">
-        Siga os passos: escolha a conta, o modelo de IA e como montar o post. Depois revise e publique ou agende.
-      </p>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-          {error}
-        </div>
-      )}
-      {agendadoSuccess && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md text-green-800 text-sm">
-          {agendadoSuccess}
-        </div>
-      )}
+    <PageShell
+      title="Postador"
+      description="Siga os passos: conta Instagram, modelo de IA e conteúdo do post. Depois revise e publique ou agende."
+      wide
+    >
+      {error && <div className="alert-error mb-6">{error}</div>}
+      {agendadoSuccess && <div className="alert-success mb-6">{agendadoSuccess}</div>}
 
       {step === "form" && (
         <div className="space-y-6">
@@ -417,7 +409,7 @@ export function Postador() {
 
           {/* Passo 1 — Conta */}
           {wizardStep === 1 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+            <div className="card space-y-4">
               <h2 className="text-lg font-semibold text-gray-900">Onde vai publicar?</h2>
               <p className="text-sm text-gray-600">Selecione a conta Instagram. Essa escolha será usada ao publicar ou ao disparar um post agendado daqui.</p>
               {contasInstagram.length === 0 ? (
@@ -472,7 +464,7 @@ export function Postador() {
 
           {/* Passo 2 — IA */}
           {wizardStep === 2 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+            <div className="card space-y-4">
               <h2 className="text-lg font-semibold text-gray-900">Modelo de IA para a legenda</h2>
               <p className="text-sm text-gray-600">Escolha o provedor e o modelo que geram o texto do post (e refinos com «Refazer caption»).</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -536,7 +528,7 @@ export function Postador() {
 
           {/* Passo 3 — Tipo de conteúdo */}
           {wizardStep === 3 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-5">
+            <div className="card space-y-5">
               <h2 className="text-lg font-semibold text-gray-900">Como montar o post?</h2>
               <p className="text-sm text-gray-600">Escolha uma opção. Só as ações da opção selecionada aparecem abaixo.</p>
 
@@ -919,7 +911,7 @@ export function Postador() {
       )}
 
       <AgendadosList contas={contasInstagram} contaPadraoId={contaPadraoId} onPublished={handleNovoPost} />
-    </div>
+    </PageShell>
   );
 }
 
@@ -974,17 +966,19 @@ function AgendadosList({
   if (list.length === 0 && !loading) return null;
 
   return (
-    <div className="mt-10 pt-6 border-t border-gray-200">
-      <h2 className="text-lg font-semibold text-gray-900 mb-2">Posts agendados</h2>
-      <p className="text-sm text-gray-500 mb-3">Selecione um post e clique em «Publicar agora» para publicar.</p>
+    <div className="mt-12 border-t border-slate-200/90 pt-10">
+      <h2 className="font-display text-xl font-semibold text-slate-900">Posts agendados</h2>
+      <p className="mt-1 text-sm text-slate-600">Selecione um post e clique em «Publicar agora» para publicar.</p>
       {contas.length > 1 && (
-        <div className="mb-3">
-          <label htmlFor="agendado-conta" className="block text-sm font-medium text-gray-700 mb-1">Publicar na conta</label>
+        <div className="mb-4 mt-4">
+          <label htmlFor="agendado-conta" className="label-field">
+            Publicar na conta
+          </label>
           <select
             id="agendado-conta"
             value={contaIdParaPublicar ?? ""}
             onChange={(e) => setContaIdParaPublicar(e.target.value || null)}
-            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            className="input-field max-w-md py-2 text-sm"
           >
             {contas.map((c) => (
               <option key={c.id} value={c.id}>{c.nome || c.ig_user_id}</option>
@@ -993,42 +987,45 @@ function AgendadosList({
         </div>
       )}
       {loading ? (
-        <p className="text-gray-500 text-sm">Carregando...</p>
+        <p className="text-sm text-slate-500">Carregando…</p>
       ) : (
-        <ul className="space-y-2 max-h-64 overflow-y-auto">
+        <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto">
           {list.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm border-b border-gray-100 pb-2">
+            <li
+              key={item.id}
+              className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2.5 text-sm"
+            >
               <input
                 type="radio"
                 name="agendado"
                 id={`ag-${item.id}`}
                 checked={selectedId === item.id}
                 onChange={() => setSelectedId(item.id)}
-                className="rounded-full border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
               />
-              <label htmlFor={`ag-${item.id}`} className="flex-1 min-w-0 cursor-pointer">
-                <span className="text-gray-500 shrink-0">
+              <label htmlFor={`ag-${item.id}`} className="min-w-0 flex-1 cursor-pointer">
+                <span className="shrink-0 text-xs font-medium text-slate-400">
                   {new Date(item.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </span>
-                <span className="truncate max-w-[280px] ml-2 text-gray-700" title={item.caption}>
+                <span className="ml-2 max-w-[280px] truncate text-slate-800" title={item.caption}>
                   {item.caption.length > 45 ? `${item.caption.slice(0, 45)}…` : item.caption}
                 </span>
                 {item.media_type === "CAROUSEL" && item.media_urls && (
-                  <span className="ml-1 text-gray-400">({item.media_urls.length} imagens)</span>
+                  <span className="ml-1 text-slate-400">({item.media_urls.length} imagens)</span>
                 )}
               </label>
               <button
                 type="button"
                 onClick={handlePublicar}
                 disabled={publishingId !== null || selectedId !== item.id}
-                className="shrink-0 px-3 py-1 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary shrink-0 py-2 text-xs disabled:cursor-not-allowed"
               >
-                {publishingId === item.id ? "Publicando..." : "Publicar agora"}
+                {publishingId === item.id ? "Publicando…" : "Publicar agora"}
               </button>
               <button
                 type="button"
                 onClick={() => api.postador.deleteAgendado(item.id).then(load)}
-                className="shrink-0 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+                className="btn-ghost shrink-0 rounded-lg py-1.5 text-sm text-red-600 hover:bg-red-50"
               >
                 Excluir
               </button>

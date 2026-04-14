@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type CronogramaItem } from "../api/client";
+import { PageShell } from "../components/layout/PageShell";
 
 export function CronogramaPage() {
   const [list, setList] = useState<CronogramaItem[]>([]);
@@ -19,25 +20,29 @@ export function CronogramaPage() {
   }, []);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-semibold text-gray-900">Cronograma</h1>
-      <p className="mt-2 text-sm text-gray-600">
-        Histórico de posts publicados por este painel. Os links podem deixar de funcionar se o conteúdo foi
-        removido ou alterado no Instagram — é um registro interno, não um planejamento futuro.
-      </p>
-
+    <PageShell
+      title="Cronograma"
+      description={
+        <>
+          Histórico de posts publicados por este painel. Os links podem deixar de funcionar se o conteúdo foi removido ou alterado no
+          Instagram — é um registro interno, não um planejamento futuro.
+        </>
+      }
+    >
       {loading ? (
-        <p className="mt-8 text-gray-500 text-sm">Carregando...</p>
+        <p className="text-sm text-slate-500">Carregando…</p>
       ) : list.length === 0 ? (
-        <p className="mt-8 text-gray-500 text-sm">Nenhuma publicação registrada ainda.</p>
+        <div className="card border-dashed border-slate-300 bg-slate-50/50 text-center text-sm text-slate-600">
+          Nenhuma publicação registrada ainda.
+        </div>
       ) : (
-        <ul className="mt-8 space-y-3 max-h-[min(70vh,32rem)] overflow-y-auto pr-1">
+        <ul className="max-h-[min(70vh,32rem)] space-y-3 overflow-y-auto pr-1">
           {list.map((item) => (
             <li
               key={item.id}
-              className="flex flex-wrap items-center gap-2 text-sm border border-gray-100 rounded-lg px-3 py-2 bg-gray-50/80"
+              className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200/90 bg-white px-4 py-3 text-sm shadow-sm"
             >
-              <span className="text-gray-500 shrink-0">
+              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
                 {new Date(item.data_post).toLocaleString("pt-BR", {
                   day: "2-digit",
                   month: "short",
@@ -46,16 +51,16 @@ export function CronogramaPage() {
                   minute: "2-digit",
                 })}
               </span>
-              <span className="truncate flex-1 min-w-0 text-gray-800" title={item.caption}>
+              <span className="min-w-0 flex-1 truncate text-slate-800" title={item.caption}>
                 {item.caption.length > 80 ? `${item.caption.slice(0, 80)}…` : item.caption}
               </span>
-              {item.media_type === "CAROUSEL" && <span className="text-gray-400 shrink-0">Carrossel</span>}
+              {item.media_type === "CAROUSEL" && <span className="shrink-0 text-xs text-slate-400">Carrossel</span>}
               {item.link_post && (
                 <a
                   href={item.link_post}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-indigo-600 hover:underline shrink-0 font-medium"
+                  className="shrink-0 text-sm font-semibold text-indigo-600 hover:text-indigo-500"
                 >
                   Ver no Instagram
                 </a>
@@ -64,6 +69,6 @@ export function CronogramaPage() {
           ))}
         </ul>
       )}
-    </div>
+    </PageShell>
   );
 }

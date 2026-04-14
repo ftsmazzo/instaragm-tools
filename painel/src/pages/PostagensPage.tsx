@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, type Postagem } from "../api/client";
 import { formatarData } from "../utils/formatDate";
+import { PageShell } from "../components/layout/PageShell";
 
 export function PostagensPage() {
   const [postagens, setPostagens] = useState<Postagem[]>([]);
@@ -34,89 +35,84 @@ export function PostagensPage() {
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Postagens raspadas</h1>
-      <p className="text-gray-600 mt-2 mb-4">Histórico do Instagram trazido pela raspagem (n8n). Use o botão para atualizar.</p>
+    <PageShell
+      title="Postagens raspadas"
+      description="Histórico do Instagram trazido pela raspagem (n8n). Use o botão para atualizar."
+    >
+      {error && <div className="alert-error mb-6">{error}</div>}
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">{error}</div>
-      )}
-
-      <button
-        type="button"
-        onClick={handleRaspar}
-        disabled={raspando}
-        className="mb-6 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-      >
-        {raspando ? "Raspando..." : "Raspar postagens"}
+      <button type="button" onClick={handleRaspar} disabled={raspando} className="btn-primary mb-8">
+        {raspando ? "Raspando…" : "Raspar postagens"}
       </button>
 
       {loading ? (
-        <p className="text-gray-500">Carregando...</p>
+        <p className="text-sm text-slate-500">Carregando…</p>
       ) : postagens.length === 0 ? (
-        <p className="text-gray-500">Nenhuma postagem. Clique em &quot;Raspar postagens&quot; para disparar a raspagem no n8n.</p>
+        <div className="card border-dashed border-slate-300 bg-slate-50/50 text-center text-sm text-slate-600">
+          Nenhuma postagem. Clique em &quot;Raspar postagens&quot; para disparar a raspagem no n8n.
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-soft">
+          <table className="min-w-full divide-y divide-slate-200">
             <thead>
-              <tr className="bg-gray-50">
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              <tr className="bg-slate-50/90">
+                <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Mídia
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Legenda
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden sm:table-cell">
+                <th scope="col" className="hidden px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:table-cell">
                   Data
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden md:table-cell">
+                <th scope="col" className="hidden px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 md:table-cell">
                   Tipo
                 </th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider hidden lg:table-cell">
+                <th scope="col" className="hidden px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 lg:table-cell">
                   Status
                 </th>
-                <th scope="col" className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th scope="col" className="px-4 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Link
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-100">
               {postagens.map((p, i) => (
-                <tr key={p.id ?? i} className="hover:bg-gray-50/80 transition-colors">
+                <tr key={p.id ?? i} className="transition-colors hover:bg-slate-50/80">
                   <td className="px-4 py-3">
                     {p.media_url ? (
                       <a
                         href={p.link_post ?? "#"}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 shrink-0"
+                        className="block h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100"
                       >
-                        <img src={p.media_url} alt="" className="w-full h-full object-cover" />
+                        <img src={p.media_url} alt="" className="h-full w-full object-cover" />
                       </a>
                     ) : (
-                      <span className="text-gray-400 text-xs">—</span>
+                      <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 max-w-[280px] sm:max-w-[320px]">
-                    <p className="text-sm text-gray-800 line-clamp-3" title={p.caption_post ?? undefined}>
+                  <td className="max-w-[280px] px-4 py-3 sm:max-w-[320px]">
+                    <p className="line-clamp-3 text-sm text-slate-800" title={p.caption_post ?? undefined}>
                       {p.caption_post || "—"}
                     </p>
                     {p.hashtags && (
-                      <p className="text-xs text-gray-500 mt-1 truncate" title={p.hashtags}>
+                      <p className="mt-1 truncate text-xs text-slate-500" title={p.hashtags}>
                         {p.hashtags}
                       </p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell whitespace-nowrap">
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-slate-600 sm:table-cell">
                     {formatarData(p.data_post)}
                   </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="text-xs font-medium text-gray-600">{p.media_type ?? "—"}</span>
+                  <td className="hidden px-4 py-3 md:table-cell">
+                    <span className="text-xs font-medium text-slate-600">{p.media_type ?? "—"}</span>
                   </td>
-                  <td className="px-4 py-3 hidden lg:table-cell">
+                  <td className="hidden px-4 py-3 lg:table-cell">
                     <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        p.processado ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        p.processado ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                       }`}
                     >
                       {p.processado ? "Processado" : "Pendente"}
@@ -128,12 +124,12 @@ export function PostagensPage() {
                         href={p.link_post}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+                        className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-indigo-100 hover:text-indigo-800"
                       >
                         Abrir
                       </a>
                     ) : (
-                      <span className="text-gray-400 text-xs">—</span>
+                      <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
                 </tr>
@@ -142,6 +138,6 @@ export function PostagensPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

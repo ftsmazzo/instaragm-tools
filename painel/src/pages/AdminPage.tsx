@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { PageShell } from "../components/layout/PageShell";
 import {
   api,
   getAuthToken,
@@ -320,130 +321,132 @@ export function AdminPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Administração</h1>
-        <p className="text-gray-600 mt-2">Carregando...</p>
-      </div>
+      <PageShell title="Administração" description="Carregando configuração…" wide>
+        <div className="card h-36 animate-pulse bg-slate-100/80" aria-hidden />
+      </PageShell>
     );
   }
 
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Administração</h1>
-      <p className="text-gray-600 mt-2 mb-6">
-        {useWorkspace
+    <PageShell
+      wide
+      title="Administração"
+      description={
+        useWorkspace
           ? "Workspace da sua organização: empresa e contas Instagram usadas no Postador e integrações."
-          : "Dados da empresa e contas Instagram para postar (modo legado, sem login)."}
-      </p>
-
+          : "Dados da empresa e contas Instagram para postar (modo legado, sem login)."
+      }
+    >
       {needLogin && (
-        <div className="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 text-sm">
-          <p className="font-medium">Login necessário</p>
-          <p className="mt-1 text-indigo-800/90">As contas Instagram estão vinculadas ao seu usuário e organização.</p>
-          <Link to="/login" className="mt-3 inline-block text-indigo-700 font-semibold hover:underline">
+        <div className="alert-info mb-6">
+          <p className="font-semibold">Login necessário</p>
+          <p className="mt-1 opacity-90">As contas Instagram estão vinculadas ao seu usuário e organização.</p>
+          <Link to="/login" className="btn-primary mt-4 inline-flex">
             Ir para login
           </Link>
         </div>
       )}
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">{error}</div>
-      )}
+      {error && <div className="alert-error mb-6">{error}</div>}
 
       {!needLogin && (
-      <div className="space-y-6">
-        <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
-          <h2 className="text-lg font-medium text-gray-900">Dados da empresa</h2>
-          <p className="text-sm text-gray-500">
-            Esses campos alimentam a API (<code className="text-xs bg-gray-100 px-1 rounded">empresa_perfil</code> no{" "}
-            <code className="text-xs bg-gray-100 px-1 rounded">agent-config</code>) para montar contexto no n8n sem repetir tudo nos prompts.
+      <div className="space-y-8">
+        <div className="card space-y-4">
+          <h2 className="font-display text-xl font-semibold text-slate-900">Dados da empresa</h2>
+          <p className="text-sm text-slate-600">
+            Esses campos alimentam a API (<code className="rounded bg-slate-100 px-1 text-xs">empresa_perfil</code> no{" "}
+            <code className="rounded bg-slate-100 px-1 text-xs">agent-config</code>) para montar contexto no n8n sem repetir tudo nos prompts.
           </p>
-          <label className="block text-sm font-medium text-gray-700">Nome (razão social / registro)</label>
+          <label className="label-field">Nome (razão social / registro)</label>
           <input
             type="text"
             value={empresa.nome}
             onChange={(e) => setEmpresa((x) => ({ ...x, nome: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="input-field"
             placeholder="Ex.: Fabrica IA"
           />
-          <label className="block text-sm font-medium text-gray-700">Nome fantasia / marca</label>
+          <label className="label-field">Nome fantasia / marca</label>
           <input
             type="text"
             value={empresa.nome_fantasia}
             onChange={(e) => setEmpresa((x) => ({ ...x, nome_fantasia: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="input-field"
             placeholder="Como a marca aparece para o público"
           />
-          <label className="block text-sm font-medium text-gray-700">Segmento</label>
+          <label className="label-field">Segmento</label>
           <input
             type="text"
             value={empresa.segmento}
             onChange={(e) => setEmpresa((x) => ({ ...x, segmento: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="input-field"
             placeholder="Ex.: imobiliária, clínica, e-commerce"
           />
-          <label className="block text-sm font-medium text-gray-700">Cidade / região de atuação</label>
+          <label className="label-field">Cidade / região de atuação</label>
           <input
             type="text"
             value={empresa.cidade}
             onChange={(e) => setEmpresa((x) => ({ ...x, cidade: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="input-field"
           />
-          <label className="block text-sm font-medium text-gray-700">Tom de voz (curto)</label>
+          <label className="label-field">Tom de voz (curto)</label>
           <input
             type="text"
             value={empresa.tom_voz}
             onChange={(e) => setEmpresa((x) => ({ ...x, tom_voz: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+            className="input-field"
             placeholder="Ex.: cordial e direto; sem jargão excessivo"
           />
-          <label className="block text-sm font-medium text-gray-700">Sobre a empresa</label>
+          <label className="label-field">Sobre a empresa</label>
           <textarea
             value={empresa.sobre}
             onChange={(e) => setEmpresa((x) => ({ ...x, sobre: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[80px]"
+            className="textarea-field min-h-[100px]"
             placeholder="1–3 frases: o que faz, para quem, diferencial."
           />
-          <label className="block text-sm font-medium text-gray-700">Objetivo de qualificação (multi-segmento)</label>
+          <label className="label-field">Objetivo de qualificação (multi-segmento)</label>
           <textarea
             value={empresa.objetivo_qualificacao}
             onChange={(e) => setEmpresa((x) => ({ ...x, objetivo_qualificacao: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[72px]"
+            className="textarea-field min-h-[88px]"
             placeholder="O que o agente deve descobrir no lead (ex.: interesse em compra, agendar visita, orçamento)."
           />
-          <button
-            type="button"
-            onClick={handleSaveEmpresa}
-            disabled={saving}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
-          >
+          <button type="button" onClick={handleSaveEmpresa} disabled={saving} className="btn-primary">
             Salvar dados da empresa
           </button>
         </div>
 
         <div>
-          <h2 className="text-lg font-medium text-gray-900 mb-2">Contas Instagram para postar</h2>
-          <p className="text-sm text-gray-500 mb-3">Adicione várias contas e escolha qual usar ao publicar no Postador.</p>
+          <h2 className="font-display text-xl font-semibold text-slate-900">Contas Instagram para postar</h2>
+          <p className="mt-2 text-sm text-slate-600">Adicione várias contas e escolha qual usar ao publicar no Postador.</p>
 
-          <ul className="space-y-2 mb-4">
+          <ul className="mb-6 mt-4 space-y-3">
             {contas.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="font-medium text-gray-800">{c.nome || "Sem nome"}</span>
-                <span className="text-sm text-gray-500">({c.ig_user_id})</span>
-                {c.has_token && <span className="text-xs text-green-600">Token postagem</span>}
-                {c.has_agent_token && <span className="text-xs text-teal-700">Token agente</span>}
-                {c.agent_ativo && <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">Agente ativo</span>}
-                {defaultId === c.id && <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">Padrão</span>}
-                <div className="ml-auto flex gap-2">
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 p-4 shadow-sm"
+              >
+                <span className="font-semibold text-slate-800">{c.nome || "Sem nome"}</span>
+                <span className="text-sm text-slate-500">({c.ig_user_id})</span>
+                {c.has_token && <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Token postagem</span>}
+                {c.has_agent_token && (
+                  <span className="rounded-md bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">Token agente</span>
+                )}
+                {c.agent_ativo && (
+                  <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Agente ativo</span>
+                )}
+                {defaultId === c.id && (
+                  <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">Padrão</span>
+                )}
+                <div className="ml-auto flex flex-wrap gap-2">
                   {defaultId !== c.id && (
-                    <button type="button" onClick={() => handleSetDefault(c.id)} disabled={saving} className="text-sm text-indigo-600 hover:underline">
+                    <button type="button" onClick={() => handleSetDefault(c.id)} disabled={saving} className="btn-ghost text-indigo-600 hover:text-indigo-700">
                       Definir padrão
                     </button>
                   )}
-                  <button type="button" onClick={() => startEdit(c)} disabled={saving} className="text-sm text-gray-600 hover:underline">
+                  <button type="button" onClick={() => startEdit(c)} disabled={saving} className="btn-ghost">
                     Editar
                   </button>
-                  <button type="button" onClick={() => handleRemoveConta(c.id)} disabled={saving} className="text-sm text-red-600 hover:underline">
+                  <button type="button" onClick={() => handleRemoveConta(c.id)} disabled={saving} className="btn-ghost text-red-600 hover:text-red-700">
                     Excluir
                   </button>
                 </div>
@@ -452,31 +455,31 @@ export function AdminPage() {
           </ul>
 
           {(editId === "new" || editId) && (
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-              <h3 className="font-medium text-gray-800">{editId === "new" ? "Nova conta" : "Editar conta"}</h3>
+            <div className="card space-y-4 bg-slate-50/50">
+              <h3 className="font-display text-lg font-semibold text-slate-900">{editId === "new" ? "Nova conta" : "Editar conta"}</h3>
               <input
                 type="text"
                 value={form.nome}
                 onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="input-field"
                 placeholder="Nome (ex.: Conta principal)"
               />
               <input
                 type="text"
                 value={form.ig_user_id}
                 onChange={(e) => setForm((f) => ({ ...f, ig_user_id: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+                className="input-field font-mono text-sm"
                 placeholder="ID do usuário Instagram (ig_user_id)"
               />
               <input
                 type="password"
                 value={form.access_token}
                 onChange={(e) => setForm((f) => ({ ...f, access_token: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+                className="input-field font-mono text-sm"
                 placeholder={editId === "new" ? "Token de publicação Graph API (obrigatório)" : "Token postagem (vazio = manter)"}
               />
-              <p className="text-xs text-gray-500 font-medium pt-1">Agente Instagram (Direct / comentários)</p>
-              <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Agente Instagram (Direct / comentários)</p>
+              <div className="alert-warn mb-2 text-xs leading-relaxed">
                 <p className="font-semibold">Importante — painel ≠ n8n automaticamente</p>
                 <p className="mt-1 leading-relaxed">
                   Salvar tokens e prompts aqui grava na <strong>API / banco</strong>. O workflow do n8n <strong>não muda sozinho</strong> e{" "}
@@ -487,22 +490,23 @@ export function AdminPage() {
                   <code className="rounded bg-amber-100/80 px-1">agent_prompt_direct</code> nos agentes. Sem isso, o n8n segue com texto fixo no fluxo.
                 </p>
               </div>
-              <p className="text-xs text-gray-500 mb-1">
+              <p className="mb-1 text-xs text-slate-600">
                 Token separado do de publicação. Use o token com permissões de mensagens conforme o app Meta. Variável na API:{" "}
-                <code className="bg-gray-200 px-1 rounded">INTERNAL_AGENT_API_SECRET</code> (mesmo valor do header no n8n).
+                <code className="rounded bg-slate-200 px-1">INTERNAL_AGENT_API_SECRET</code> (mesmo valor do header no n8n).
               </p>
               <input
                 type="password"
                 value={form.agent_access_token}
                 onChange={(e) => setForm((f) => ({ ...f, agent_access_token: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono"
+                className="input-field font-mono text-sm"
                 placeholder={editId === "new" ? "Token do agente (opcional)" : "Token agente (vazio = manter)"}
               />
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.agent_ativo}
                   onChange={(e) => setForm((f) => ({ ...f, agent_ativo: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
                 />
                 Agente ativo (automação pode usar esta conta)
               </label>
@@ -510,10 +514,10 @@ export function AdminPage() {
                 type="text"
                 value={form.agent_nome}
                 onChange={(e) => setForm((f) => ({ ...f, agent_nome: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="input-field"
                 placeholder="Nome do assistente (como a IA se apresenta)"
               />
-              <p className="text-xs text-gray-600 rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 <strong>O que aparece abaixo</strong> é o que está <strong>salvo no banco</strong> para esta conta. Atualizar o painel no deploy{" "}
                 <strong>não troca</strong> texto antigo sozinho. O CONTEXTO DA EMPRESA (dados acima + API) entra no n8n pelo{" "}
                 <code className="text-[11px] bg-white px-1 rounded border">agent-config</code>; estes campos são as{" "}
@@ -522,37 +526,33 @@ export function AdminPage() {
               <textarea
                 value={form.agent_prompt_comentarios}
                 onChange={(e) => setForm((f) => ({ ...f, agent_prompt_comentarios: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[88px]"
+                className="textarea-field min-h-[120px]"
                 placeholder="Prompt para respostas em comentários"
               />
               <textarea
                 value={form.agent_prompt_direct}
                 onChange={(e) => setForm((f) => ({ ...f, agent_prompt_direct: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm min-h-[88px]"
+                className="textarea-field min-h-[120px]"
                 placeholder="Prompt para mensagens diretas"
               />
               <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={aplicarPromptsPadraoAtuais}
-                  className="w-full px-3 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
-                >
+                <button type="button" onClick={aplicarPromptsPadraoAtuais} className="btn-primary w-full">
                   Substituir pelos padrões atuais (comentário + Direct)
                 </button>
                 <button
                   type="button"
                   onClick={aplicarGerarAgente}
-                  className="w-full px-3 py-2 border border-emerald-600 text-emerald-700 rounded-md text-sm font-medium hover:bg-emerald-50"
+                  className="btn-secondary w-full border-emerald-300 text-emerald-800 hover:bg-emerald-50"
                 >
                   Ativar agente + nome sugerido (só preenche prompt se estiver vazio)
                 </button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={handleSaveConta}
                   disabled={saving || !form.nome.trim() || !form.ig_user_id.trim() || (editId === "new" && !form.access_token.trim())}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+                  className="btn-primary"
                 >
                   {saving ? "Salvando..." : editId === "new" ? "Adicionar conta" : "Salvar alterações"}
                 </button>
@@ -562,7 +562,7 @@ export function AdminPage() {
                     setEditId(null);
                     setForm(emptyContaForm());
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
+                  className="btn-secondary"
                 >
                   Cancelar
                 </button>
@@ -577,7 +577,7 @@ export function AdminPage() {
                 setEditId("new");
                 setForm(emptyContaForm());
               }}
-              className="px-4 py-2 border border-indigo-600 text-indigo-600 rounded-md hover:bg-indigo-50 text-sm font-medium"
+              className="btn-secondary border-indigo-300 font-semibold text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50"
             >
               + Adicionar conta Instagram
             </button>
@@ -585,6 +585,6 @@ export function AdminPage() {
         </div>
       </div>
       )}
-    </div>
+    </PageShell>
   );
 }

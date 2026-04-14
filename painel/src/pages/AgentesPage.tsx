@@ -1,33 +1,36 @@
 import { Link } from "react-router-dom";
+import { PageShell } from "../components/layout/PageShell";
 
 export function AgentesPage() {
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Agentes e leads</h1>
-      <p className="text-gray-600 mt-2">
-        A configuração do <strong>agente Instagram</strong> (token separado, prompts, ativação) fica em{" "}
-        <strong>Administração</strong>, ao editar cada conta — não nesta página.
-      </p>
-      <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50/80 p-4 text-sm text-indigo-950">
-        <p className="font-medium">Onde configurar o agente</p>
-        <ol className="mt-2 list-decimal list-inside space-y-1 text-indigo-900/90">
+    <PageShell
+      title="Agentes e leads"
+      description={
+        <>
+          A configuração do <strong className="text-slate-800">agente Instagram</strong> (token separado, prompts, ativação) fica em{" "}
+          <strong className="text-slate-800">Administração</strong>, ao editar cada conta — não nesta página.
+        </>
+      }
+    >
+      <div className="card mb-6 border-indigo-200/80 bg-gradient-to-br from-indigo-50/90 to-white">
+        <p className="font-display text-lg font-semibold text-indigo-950">Onde configurar o agente</p>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-indigo-950/90">
           <li>Abra Administração (menu lateral).</li>
           <li>Na lista de contas, clique em <strong>Editar</strong> na conta desejada (ou adicione uma conta).</li>
-          <li>Role até a seção <strong>Agente Instagram (Direct / comentários)</strong>: token do agente, prompts e botão para gerar perfil padrão.</li>
+          <li>
+            Role até a seção <strong>Agente Instagram (Direct / comentários)</strong>: token do agente, prompts e botão para gerar perfil padrão.
+          </li>
         </ol>
-        <Link
-          to="/admin"
-          className="mt-4 inline-block rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
+        <Link to="/admin" className="btn-primary mt-5 inline-flex">
           Ir para Administração
         </Link>
       </div>
-      <div className="mt-6 rounded-lg border border-dashed border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-900">
-        <p className="font-medium">Em breve nesta rota</p>
-        <p className="mt-1 text-amber-800/90">
+      <div className="card border-dashed border-amber-300/80 bg-amber-50/40">
+        <p className="font-semibold text-amber-950">Em breve nesta rota</p>
+        <p className="mt-2 text-sm leading-relaxed text-amber-900/85">
           Visualização de leads e conversas integrada ao n8n / automação — por enquanto o fluxo usa a API interna configurada na admin (token + prompts salvos no banco).
         </p>
       </div>
-    </div>
+    </PageShell>
   );
 }

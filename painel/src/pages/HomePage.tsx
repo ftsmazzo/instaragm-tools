@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { PageShell } from "../components/layout/PageShell";
 
 export function HomePage() {
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "error">("checking");
@@ -12,41 +13,86 @@ export function HomePage() {
       .catch(() => setApiStatus("error"));
   }, []);
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-semibold text-gray-900">Máquina de vendas</h1>
-      <p className="text-gray-600 mt-2 mb-6">
-        FabriaIA — hub para Instagram: <strong>Postador</strong> com IA, <strong>Postagens raspadas</strong>,{" "}
-        <strong>Administração</strong> das contas (com login quando o servidor usa banco multiusuário).
-      </p>
+  const cards = [
+    {
+      to: "/postador",
+      title: "Postador",
+      desc: "Legenda com IA, mídia e publicação no Instagram.",
+      accent: "from-indigo-500 to-violet-600",
+    },
+    {
+      to: "/postagens",
+      title: "Postagens raspadas",
+      desc: "Histórico trazido pela automação.",
+      accent: "from-slate-600 to-slate-800",
+    },
+    {
+      to: "/cronograma",
+      title: "Cronograma",
+      desc: "Posts já publicados por este painel.",
+      accent: "from-teal-600 to-emerald-700",
+    },
+    {
+      to: "/admin",
+      title: "Administração",
+      desc: "Contas Instagram, empresa e agente.",
+      accent: "from-amber-500 to-orange-600",
+    },
+  ];
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4 mb-6">
-        <p className="text-sm font-medium text-gray-700 mb-2">Status da API</p>
-        <p className="text-sm">
-          {apiStatus === "checking" && <span className="text-gray-500">Verificando...</span>}
-          {apiStatus === "ok" && <span className="text-green-600 font-medium">Conectada</span>}
-          {apiStatus === "error" && <span className="text-red-600 font-medium">Indisponível</span>}
-        </p>
+  return (
+    <PageShell
+      title="Início"
+      description={
+        <>
+          Hub <strong className="text-slate-800">Instagram</strong> da FabriaIA: postador com IA, raspagem de postagens e
+          configuração central — com login quando o servidor usa banco multiusuário.
+        </>
+      }
+    >
+      <div className="card mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status da API</p>
+          <p className="mt-1 text-lg font-medium text-slate-900">
+            {apiStatus === "checking" && <span className="text-slate-500">Verificando…</span>}
+            {apiStatus === "ok" && (
+              <span className="inline-flex items-center gap-2 text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgb(16_185_129/0.8)]" aria-hidden />
+                Conectada
+              </span>
+            )}
+            {apiStatus === "error" && <span className="text-red-600">Indisponível</span>}
+          </p>
+        </div>
+        {apiStatus === "error" && (
+          <p className="max-w-md text-sm text-slate-600">Confira se a API está no ar e se o painel aponta para a URL correta.</p>
+        )}
       </div>
 
-      <p className="text-sm text-gray-600 mb-3">Atalhos:</p>
-      <ul className="flex flex-wrap gap-2">
-        <li>
-          <Link to="/postador" className="inline-flex px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-800 text-sm font-medium hover:bg-indigo-100">
-            Postador
-          </Link>
-        </li>
-        <li>
-          <Link to="/postagens" className="inline-flex px-3 py-1.5 rounded-md bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200">
-            Postagens raspadas
-          </Link>
-        </li>
-        <li>
-          <Link to="/admin" className="inline-flex px-3 py-1.5 rounded-md bg-gray-100 text-gray-800 text-sm font-medium hover:bg-gray-200">
-            Administração
-          </Link>
-        </li>
+      <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">Atalhos</p>
+      <ul className="grid gap-4 sm:grid-cols-2">
+        {cards.map(({ to, title, desc, accent }) => (
+          <li key={to}>
+            <Link
+              to={to}
+              className="group card flex h-full flex-col transition-shadow hover:shadow-md"
+            >
+              <div
+                className={`mb-4 h-1 w-12 rounded-full bg-gradient-to-r ${accent} transition-transform group-hover:scale-x-110`}
+                aria-hidden
+              />
+              <span className="font-display text-lg font-semibold text-slate-900 group-hover:text-indigo-700">{title}</span>
+              <span className="mt-1.5 text-sm leading-relaxed text-slate-600">{desc}</span>
+              <span className="mt-4 inline-flex items-center text-sm font-semibold text-indigo-600">
+                Abrir
+                <span className="ml-1 transition-transform group-hover:translate-x-0.5" aria-hidden>
+                  →
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
       </ul>
-    </div>
+    </PageShell>
   );
 }

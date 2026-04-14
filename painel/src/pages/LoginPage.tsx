@@ -24,7 +24,6 @@ export function LoginPage() {
       .catch(() => setStatus({ database: false, hasUsers: false, allowRegister: false }));
   }, []);
 
-  /** Já logado: não ficar preso na tela de login. */
   useEffect(() => {
     if (!getAuthToken()) return;
     api
@@ -41,8 +40,7 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const dest =
-        from && from !== "/login" ? from : "/";
+      const dest = from && from !== "/login" ? from : "/";
       if (mode === "register") {
         const r = await api.register(email.trim(), password, organizationName.trim() || "Minha empresa");
         setAuthToken(r.token);
@@ -60,98 +58,107 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-        <h1 className="text-xl font-semibold text-gray-900 text-center">Máquina de vendas</h1>
-        <p className="text-sm text-gray-500 text-center mt-1 mb-6">FabriaIA · Acesso ao painel</p>
-
-        {status?.database === false && (
-          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-900 text-sm">
-            API sem <code className="text-xs">DATABASE_URL</code>: o login multiusuário não está ativo. Use{" "}
-            <Link to="/admin" className="underline font-medium">
-              Administração
-            </Link>{" "}
-            no modo legado.
-          </div>
-        )}
-
-        {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">{error}</div>}
-
-        <div className="flex rounded-lg bg-gray-100 p-1 mb-6">
-          <button
-            type="button"
-            onClick={() => setMode("login")}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-              mode === "login" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
-            }`}
-          >
-            Entrar
-          </button>
-          {status?.allowRegister && (
-            <button
-              type="button"
-              onClick={() => setMode("register")}
-              className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
-                mode === "register" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
-              }`}
-            >
-              Criar conta
-            </button>
-          )}
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-900 px-4 py-12 sm:px-6">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 50% at 50% -20%, rgb(99 102 241 / 0.35), transparent), radial-gradient(ellipse 60% 40% at 100% 0%, rgb(45 212 191 / 0.12), transparent)",
+        }}
+        aria-hidden
+      />
+      <div className="relative w-full max-w-md">
+        <div className="mb-8 text-center">
+          <p className="font-display text-2xl font-semibold tracking-tight text-white">Máquina de vendas</p>
+          <p className="mt-1 text-sm text-slate-400">FabriaIA · Acesso ao painel</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "register" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da empresa / workspace</label>
-              <input
-                type="text"
-                value={organizationName}
-                onChange={(e) => setOrganizationName(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                placeholder="Ex.: Imobiliária Silva"
-                autoComplete="organization"
-              />
+        <div className="rounded-2xl border border-white/10 bg-white/95 p-8 shadow-lift backdrop-blur-sm">
+          {status?.database === false && (
+            <div className="alert-warn mb-6">
+              API sem <code className="rounded bg-amber-100/80 px-1 text-xs">DATABASE_URL</code>: o login multiusuário não está
+              ativo. Use{" "}
+              <Link to="/admin" className="font-semibold text-amber-950 underline decoration-amber-700/50 underline-offset-2">
+                Administração
+              </Link>{" "}
+              no modo legado.
             </div>
           )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              autoComplete="email"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-            <input
-              type="password"
-              required
-              minLength={mode === "register" ? 8 : undefined}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              autoComplete={mode === "register" ? "new-password" : "current-password"}
-            />
-            {mode === "register" && <p className="text-xs text-gray-500 mt-1">Mínimo 8 caracteres.</p>}
-          </div>
-          <button
-            type="submit"
-            disabled={loading || status?.database === false}
-            className="w-full py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {loading ? "Aguarde..." : mode === "register" ? "Criar conta e entrar" : "Entrar"}
-          </button>
-        </form>
 
-        <p className="text-center mt-6 text-sm text-gray-500">
-          <Link to="/" className="text-indigo-600 hover:underline">
-            Voltar ao início
-          </Link>
-        </p>
+          {error && <div className="alert-error mb-6">{error}</div>}
+
+          <div className="mb-6 flex rounded-xl bg-slate-100/90 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("login")}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+                mode === "login" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Entrar
+            </button>
+            {status?.allowRegister && (
+              <button
+                type="button"
+                onClick={() => setMode("register")}
+                className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition-all ${
+                  mode === "register" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Criar conta
+              </button>
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {mode === "register" && (
+              <div>
+                <label className="label-field">Nome da empresa / workspace</label>
+                <input
+                  type="text"
+                  value={organizationName}
+                  onChange={(e) => setOrganizationName(e.target.value)}
+                  className="input-field"
+                  placeholder="Ex.: Imobiliária Silva"
+                  autoComplete="organization"
+                />
+              </div>
+            )}
+            <div>
+              <label className="label-field">E-mail</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input-field"
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="label-field">Senha</label>
+              <input
+                type="password"
+                required
+                minLength={mode === "register" ? 8 : undefined}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input-field"
+                autoComplete={mode === "register" ? "new-password" : "current-password"}
+              />
+              {mode === "register" && <p className="mt-1.5 text-xs text-slate-500">Mínimo 8 caracteres.</p>}
+            </div>
+            <button type="submit" disabled={loading || status?.database === false} className="btn-primary mt-2 w-full py-3">
+              {loading ? "Aguarde…" : mode === "register" ? "Criar conta e entrar" : "Entrar"}
+            </button>
+          </form>
+
+          <p className="mt-8 text-center text-sm text-slate-500">
+            <Link to="/" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Voltar ao início
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
