@@ -157,6 +157,8 @@ export type AuthStatus = {
   message?: string;
   /** true quando META_APP_* e redirect estão na API (botão Conectar Meta no painel). */
   metaOAuthConfigured?: boolean;
+  /** instagram = instagram.com/oauth/authorize; facebook = dialog Facebook + páginas. */
+  metaOAuthMode?: "facebook" | "instagram";
 };
 
 function postadorAuthHeaders(): Record<string, string> {

@@ -132,6 +132,7 @@ export function AdminPage() {
   const [needLogin, setNeedLogin] = useState(false);
   /** API com META_APP_ID + SECRET + redirect (botão conectar). */
   const [metaOAuth, setMetaOAuth] = useState(false);
+  const [metaOAuthMode, setMetaOAuthMode] = useState<"facebook" | "instagram">("facebook");
 
   useEffect(() => {
     let cancelled = false;
@@ -142,6 +143,9 @@ export function AdminPage() {
         const status = await api.getAuthStatus();
         if (cancelled) return;
         setMetaOAuth(Boolean(status.metaOAuthConfigured));
+        if (status.metaOAuthMode === "instagram" || status.metaOAuthMode === "facebook") {
+          setMetaOAuthMode(status.metaOAuthMode);
+        }
         if (status.authMode === "workspace" && status.hasUsers) {
           const token = getAuthToken();
           if (!token) {
@@ -196,7 +200,12 @@ export function AdminPage() {
       }
     } else if (mo === "err") {
       const r = searchParams.get("reason");
-      setError(r ? decodeURIComponent(r.replace(/\+/g, " ")) : "Não foi possível conectar ao Facebook.");
+      const base = r ? decodeURIComponent(r.replace(/\+/g, " ")) : "Não foi possível conectar ao Facebook.";
+      const extra =
+        /invalid platform app/i.test(base)
+          ? "\n\nDesbloqueio: na API defina META_OAUTH_MODE=facebook (ou remova a variável), reinicie o serviço. No app Meta adicione o produto «Facebook Login» e o mesmo redirect OAuth (…/api/auth/meta/callback). O login passa pelo Facebook e continua a gravar Instagram no workspace."
+          : "";
+      setError(base + extra);
     }
     const next = new URLSearchParams(searchParams);
     next.delete("meta_oauth");
@@ -469,6 +478,15 @@ export function AdminPage() {
               <button type="button" onClick={handleConectarMeta} disabled={saving} className="btn-primary">
                 {saving ? "Redirecionando…" : "Conectar conta Meta"}
               </button>
+              {metaOAuthMode === "instagram" && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950">
+                  <strong>Erro «Invalid platform app» no Instagram?</strong> O app ainda não é aceite no fluxo{" "}
+                  <code className="rounded bg-white/90 px-1">instagram.com/oauth</code>. Na API use{" "}
+                  <code className="rounded bg-white/90 px-1">META_OAUTH_MODE=facebook</code>, reinicie, e no Meta adicione{" "}
+                  <strong>Facebook Login</strong> com o mesmo <code className="rounded bg-white/90 px-1">redirect_uri</code>. O
+                  botão abre o login Facebook e liga a página com Instagram como antes.
+                </div>
+              )}
               <p className="text-xs text-slate-500">
                 Na API: <code className="rounded bg-white/80 px-1">META_OAUTH_REDIRECT_URI</code> igual ao callback (ex.:{" "}
                 <code className="rounded bg-white/80 px-1">…/api/auth/meta/callback</code>),{" "}

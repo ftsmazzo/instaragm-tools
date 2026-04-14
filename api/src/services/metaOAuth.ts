@@ -10,6 +10,8 @@ export function getMetaOAuthMode(): "facebook" | "instagram" {
 
 export type MetaOAuthEnv = {
   appId: string;
+  /** client_id no OAuth Instagram; por defeito = META_APP_ID. Se a Meta mostrar outro ID no produto Instagram, use META_INSTAGRAM_CLIENT_ID. */
+  instagramClientId: string;
   appSecret: string;
   redirectUri: string;
   graphVersion: string;
@@ -44,7 +46,8 @@ export function getMetaOAuthEnv(): MetaOAuthEnv | null {
           "business_management",
         ].join(","));
   const stateSecret = process.env.META_OAUTH_STATE_SECRET?.trim() || process.env.JWT_SECRET?.trim() || "dev-meta-state";
-  return { appId, appSecret, redirectUri, graphVersion, scopes, stateSecret };
+  const instagramClientId = process.env.META_INSTAGRAM_CLIENT_ID?.trim() || appId;
+  return { appId, instagramClientId, appSecret, redirectUri, graphVersion, scopes, stateSecret };
 }
 
 export function isMetaOAuthConfigured(): boolean {
@@ -99,7 +102,7 @@ export function buildFacebookAuthorizeUrl(env: MetaOAuthEnv, state: string): str
 /** Mesmo fluxo da URL incorporada no passo "login da empresa" do Instagram no Dev Console. */
 export function buildInstagramAuthorizeUrl(env: MetaOAuthEnv, state: string): string {
   const u = new URL("https://www.instagram.com/oauth/authorize");
-  u.searchParams.set("client_id", env.appId);
+  u.searchParams.set("client_id", env.instagramClientId);
   u.searchParams.set("redirect_uri", env.redirectUri);
   u.searchParams.set("response_type", "code");
   u.searchParams.set("scope", env.scopes);
@@ -167,7 +170,7 @@ export async function exchangeInstagramCodeForLongLivedToken(
   code: string
 ): Promise<{ access_token: string }> {
   const body = new URLSearchParams({
-    client_id: env.appId,
+    client_id: env.instagramClientId,
     client_secret: env.appSecret,
     grant_type: "authorization_code",
     redirect_uri: env.redirectUri,

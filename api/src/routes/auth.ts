@@ -27,14 +27,15 @@ import { mergeInstagramPagesIntoWorkspace } from "../services/metaOAuthWorkspace
 export async function authRoutes(app: FastifyInstance, _opts: FastifyPluginOptions) {
   app.get("/status", async (_request, reply) => {
     if (!isDbConfigured()) {
-      return reply.send({
-        database: false,
-        hasUsers: false,
-        allowRegister: false,
-        authMode: "legacy",
-        metaOAuthConfigured: false,
-        message: "Sem DATABASE_URL: use apenas /api/config (modo legado).",
-      });
+    return reply.send({
+      database: false,
+      hasUsers: false,
+      allowRegister: false,
+      authMode: "legacy",
+      metaOAuthConfigured: false,
+      metaOAuthMode: "facebook" as const,
+      message: "Sem DATABASE_URL: use apenas /api/config (modo legado).",
+    });
     }
     const n = await countUsers();
     const allowOpen = process.env.ALLOW_OPEN_REGISTER === "true";
@@ -44,6 +45,7 @@ export async function authRoutes(app: FastifyInstance, _opts: FastifyPluginOptio
       allowRegister: n === 0 || allowOpen,
       authMode: "workspace",
       metaOAuthConfigured: isMetaOAuthConfigured(),
+      metaOAuthMode: getMetaOAuthMode(),
     });
   });
 
